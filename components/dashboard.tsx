@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Trophy, Users, Calendar, Clock, Star, Target } from "lucide-react"
+import { Trophy, Users, Calendar, Clock, Star, Target, User } from "lucide-react"
 import type { Player } from "@/types/tennis"
 import { supabase } from "@/lib/supabase"
 
@@ -27,8 +27,9 @@ export function Dashboard({ currentPlayer, onNavigate }: DashboardProps) {
 
   const loadDashboardData = async () => {
     try {
-      // Cargar estadísticas
-      const { data: players } = await supabase.from("players").select("*")
+      // Cargar estadísticas (excluir admin del conteo)
+      const { data: players } = await supabase.from("players").select("*").neq("is_admin", true)
+
       const { data: challenges } = await supabase
         .from("challenges")
         .select("*")
@@ -43,10 +44,12 @@ export function Dashboard({ currentPlayer, onNavigate }: DashboardProps) {
         completedMatches,
       })
 
-      // Cargar top 10 jugadores
+      // Cargar top 10 jugadores (excluir admin y ordenar por ranking)
       const { data: topPlayersData } = await supabase
         .from("players")
         .select("*")
+        .neq("is_admin", true)
+        .gt("ranking_position", 0)
         .order("ranking_position", { ascending: true })
         .limit(10)
 
@@ -72,22 +75,26 @@ export function Dashboard({ currentPlayer, onNavigate }: DashboardProps) {
       <div className="text-center">
         <img src="/images/btc-logo.png" alt="Belgrano Tennis Challenge" className="mx-auto h-16 w-auto mb-4" />
         <h1 className="text-3xl font-bold text-gray-900">¡Bienvenido, {currentPlayer.first_name}!</h1>
-        <p className="text-gray-600">
-          Tu posición actual: <span className="font-semibold text-blue-600">#{currentPlayer.ranking_position}</span>
-        </p>
+        {currentPlayer.ranking_position > 0 && (
+          <p className="text-gray-600">
+            Tu posición actual: <span className="font-semibold text-blue-600">#{currentPlayer.ranking_position}</span>
+          </p>
+        )}
       </div>
 
       {/* Estadísticas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card>
-          <CardContent className="flex items-center p-6">
-            <Trophy className="h-8 w-8 text-yellow-500" />
-            <div className="ml-4">
-              <p className="text-2xl font-bold">#{currentPlayer.ranking_position}</p>
-              <p className="text-gray-600 text-sm">Tu Ranking</p>
-            </div>
-          </CardContent>
-        </Card>
+        {currentPlayer.ranking_position > 0 && (
+          <Card>
+            <CardContent className="flex items-center p-6">
+              <Trophy className="h-8 w-8 text-yellow-500" />
+              <div className="ml-4">
+                <p className="text-2xl font-bold">#{currentPlayer.ranking_position}</p>
+                <p className="text-gray-600 text-sm">Tu Ranking</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardContent className="flex items-center p-6">
@@ -120,31 +127,28 @@ export function Dashboard({ currentPlayer, onNavigate }: DashboardProps) {
         </Card>
       </div>
 
-      {/* Acciones Rápidas */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Acciones Rápidas</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Button onClick={() => onNavigate("challenge")} className="w-full justify-start" size="lg">
-            <Star className="h-4 w-4 mr-2" />
-            Hacer un Desafío
-          </Button>
-          <Button
-            onClick={() => onNavigate("availability")}
-            variant="outline"
-            className="w-full justify-start"
-            size="lg"
-          >
-            <Calendar className="h-4 w-4 mr-2" />
-            Configurar Disponibilidad
-          </Button>
-          <Button onClick={() => onNavigate("manage")} variant="outline" className="w-full justify-start" size="lg">
-            <Target className="h-4 w-4 mr-2" />
-            Ver Mis Desafíos
-          </Button>
-        </CardContent>
-      </Card>
+      {/* Acciones Rápidas - Solo para usuarios no admin */}
+      {currentPlayer.ranking_position > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Acciones Rápidas</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button onClick={() => onNavigate("challenge")} className="w-full justify-start" size="lg">
+              <Star className="h-4 w-4 mr-2" />
+              Hacer un Desafío
+            </Button>
+            <Button onClick={() => onNavigate("profile")} variant="outline" className="w-full justify-start" size="lg">
+              <User className="h-4 w-4 mr-2" />
+              Mi Perfil y Disponibilidad
+            </Button>
+            <Button onClick={() => onNavigate("manage")} variant="outline" className="w-full justify-start" size="lg">
+              <Target className="h-4 w-4 mr-2" />
+              Ver Mis Desafíos
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Ranking BTC */}
       <Card>
@@ -156,38 +160,42 @@ export function Dashboard({ currentPlayer, onNavigate }: DashboardProps) {
           <p className="text-sm text-gray-600">Los mejores jugadores del Belgrano Tennis Challenge</p>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {topPlayers.map((player, index) => (
-              <div
-                key={player.id}
-                className={`flex items-center justify-between p-3 rounded-lg ${
-                  player.id === currentPlayer.id ? "bg-blue-50 border border-blue-200" : "bg-gray-50"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                      index === 0
-                        ? "bg-yellow-500 text-white"
-                        : index === 1
-                          ? "bg-gray-400 text-white"
-                          : index === 2
-                            ? "bg-amber-600 text-white"
-                            : "bg-gray-200 text-gray-700"
-                    }`}
-                  >
-                    {player.ranking_position}
-                  </div>
-                  <div>
-                    <p className="font-medium">
-                      {player.first_name} {player.last_name}
-                      {player.id === currentPlayer.id && <span className="text-blue-600 ml-2">(Tú)</span>}
-                    </p>
+          {topPlayers.length === 0 ? (
+            <p className="text-center text-gray-500 py-8">No hay jugadores registrados aún</p>
+          ) : (
+            <div className="space-y-3">
+              {topPlayers.map((player, index) => (
+                <div
+                  key={player.id}
+                  className={`flex items-center justify-between p-3 rounded-lg ${
+                    player.id === currentPlayer.id ? "bg-blue-50 border border-blue-200" : "bg-gray-50"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                        index === 0
+                          ? "bg-yellow-500 text-white"
+                          : index === 1
+                            ? "bg-gray-400 text-white"
+                            : index === 2
+                              ? "bg-amber-600 text-white"
+                              : "bg-gray-200 text-gray-700"
+                      }`}
+                    >
+                      {player.ranking_position}
+                    </div>
+                    <div>
+                      <p className="font-medium">
+                        {player.first_name} {player.last_name}
+                        {player.id === currentPlayer.id && <span className="text-blue-600 ml-2">(Tú)</span>}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

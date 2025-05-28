@@ -18,18 +18,27 @@ export function AvailabilityConfig({ currentPlayer, onBack }: AvailabilityConfig
   const [availability, setAvailability] = useState<{ [key: string]: boolean }>({})
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState("")
+  const [error, setError] = useState("")
 
   const timeSlots = [
-    "08:00-10:00",
-    "10:00-12:00",
-    "12:00-14:00",
-    "14:00-16:00",
-    "16:00-18:00",
-    "18:00-20:00",
-    "20:00-22:00",
+    { label: "08:00-10:00", start: "08:00:00", end: "10:00:00" },
+    { label: "10:00-12:00", start: "10:00:00", end: "12:00:00" },
+    { label: "12:00-14:00", start: "12:00:00", end: "14:00:00" },
+    { label: "14:00-16:00", start: "14:00:00", end: "16:00:00" },
+    { label: "16:00-18:00", start: "16:00:00", end: "18:00:00" },
+    { label: "18:00-20:00", start: "18:00:00", end: "20:00:00" },
+    { label: "20:00-22:00", start: "20:00:00", end: "22:00:00" },
   ]
 
-  const days = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+  const days = [
+    { name: "Lunes", index: 1 },
+    { name: "Martes", index: 2 },
+    { name: "Miércoles", index: 3 },
+    { name: "Jueves", index: 4 },
+    { name: "Viernes", index: 5 },
+    { name: "Sábado", index: 6 },
+    { name: "Domingo", index: 0 },
+  ]
 
   useEffect(() => {
     loadAvailability()
@@ -37,11 +46,17 @@ export function AvailabilityConfig({ currentPlayer, onBack }: AvailabilityConfig
 
   const loadAvailability = async () => {
     try {
-      const { data } = await supabase.from("availability").select("*").eq("player_id", currentPlayer.id)
+      const { data, error } = await supabase.from("availability").select("*").eq("player_id", currentPlayer.id)
+
+      if (error) {
+        console.error("Error loading availability:", error)
+        return
+      }
 
       if (data) {
         const availabilityMap: { [key: string]: boolean } = {}
         data.forEach((slot) => {
+          // Crear clave usando day_of_week y los tiempos
           const key = `${slot.day_of_week}-${slot.start_time}-${slot.end_time}`
           availabilityMap[key] = true
         })
@@ -52,8 +67,8 @@ export function AvailabilityConfig({ currentPlayer, onBack }: AvailabilityConfig
     }
   }
 
-  const handleAvailabilityChange = (day: string, timeSlot: string, checked: boolean) => {
-    const key = `${day}-${timeSlot}`
+  const handleAvailabilityChange = (dayIndex: number, timeSlot: any, checked: boolean) => {
+    const key = `${dayIndex}-${timeSlot.start}-${timeSlot.end}`
     setAvailability((prev) => ({
       ...prev,
       [key]: checked,
@@ -63,17 +78,28 @@ export function AvailabilityConfig({ currentPlayer, onBack }: AvailabilityConfig
   const handleSaveAvailability = async () => {
     setLoading(true)
     setMessage("")
+    setError("")
 
     try {
       // Primero eliminar disponibilidad existente
-      await supabase.from("availability").delete().eq("player_id", currentPlayer.id)
+      const { error: deleteError } = await supabase.from("availability").delete().eq("player_id", currentPlayer.id)
 
-      // Luego insertar nueva disponibilidad
+      if (deleteError) {
+        console.error("Error deleting availability:", deleteError)
+        throw new Error(`Error al eliminar disponibilidad: ${deleteError.message}`)
+      }
+
+      // Preparar datos para insertar
       const availabilityData = Object.entries(availability)
         .filter(([_, isAvailable]) => isAvailable)
         .map(([key, _]) => {
-          const [dayIndex, timeSlot] = key.split("-")
-          const [startTime, endTime] = timeSlot.split("-")
+          const [dayIndex, startTime, endTime] = key.split("-")
+
+          // Validar que los datos estén completos
+          if (!dayIndex || !startTime || !endTime) {
+            throw new Error("Datos de disponibilidad incompletos")
+          }
+
           return {
             player_id: currentPlayer.id,
             day_of_week: Number.parseInt(dayIndex),
@@ -82,15 +108,21 @@ export function AvailabilityConfig({ currentPlayer, onBack }: AvailabilityConfig
           }
         })
 
+      console.log("Datos a insertar:", availabilityData)
+
       if (availabilityData.length > 0) {
-        const { error } = await supabase.from("availability").insert(availabilityData)
-        if (error) throw error
+        const { error: insertError } = await supabase.from("availability").insert(availabilityData)
+
+        if (insertError) {
+          console.error("Error inserting availability:", insertError)
+          throw new Error(`Error al guardar disponibilidad: ${insertError.message}`)
+        }
       }
 
       setMessage("Disponibilidad guardada correctamente")
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving availability:", error)
-      setMessage("Error al guardar disponibilidad")
+      setError(error.message || "Error al guardar disponibilidad")
     } finally {
       setLoading(false)
     }
@@ -124,24 +156,24 @@ export function AvailabilityConfig({ currentPlayer, onBack }: AvailabilityConfig
                 <tr>
                   <th className="text-left p-2 border-b">Día</th>
                   {timeSlots.map((slot) => (
-                    <th key={slot} className="text-center p-2 border-b text-xs">
-                      {slot}
+                    <th key={slot.label} className="text-center p-2 border-b text-xs">
+                      {slot.label}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {days.map((day, dayIndex) => (
-                  <tr key={day}>
-                    <td className="p-2 border-b font-medium">{day}</td>
+                {days.map((day) => (
+                  <tr key={day.name}>
+                    <td className="p-2 border-b font-medium">{day.name}</td>
                     {timeSlots.map((timeSlot) => {
-                      const key = `${dayIndex}-${timeSlot}`
+                      const key = `${day.index}-${timeSlot.start}-${timeSlot.end}`
                       return (
-                        <td key={timeSlot} className="text-center p-2 border-b">
+                        <td key={timeSlot.label} className="text-center p-2 border-b">
                           <Checkbox
                             checked={availability[key] || false}
                             onCheckedChange={(checked) =>
-                              handleAvailabilityChange(String(dayIndex), timeSlot, checked as boolean)
+                              handleAvailabilityChange(day.index, timeSlot, checked as boolean)
                             }
                           />
                         </td>
@@ -160,8 +192,14 @@ export function AvailabilityConfig({ currentPlayer, onBack }: AvailabilityConfig
           </div>
 
           {message && (
-            <Alert className="mt-4 border-blue-200 bg-blue-50">
-              <AlertDescription className="text-blue-800">{message}</AlertDescription>
+            <Alert className="mt-4 border-green-200 bg-green-50">
+              <AlertDescription className="text-green-800">{message}</AlertDescription>
+            </Alert>
+          )}
+
+          {error && (
+            <Alert className="mt-4 border-red-200 bg-red-50">
+              <AlertDescription className="text-red-800">{error}</AlertDescription>
             </Alert>
           )}
         </CardContent>

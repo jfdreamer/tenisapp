@@ -21,6 +21,7 @@ export function ChallengeManagement({ currentPlayer, onBack }: ChallengeManageme
   const [completedMatches, setCompletedMatches] = useState<Challenge[]>([])
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState("")
+  const [error, setError] = useState("")
 
   useEffect(() => {
     loadChallenges()
@@ -29,7 +30,7 @@ export function ChallengeManagement({ currentPlayer, onBack }: ChallengeManageme
   const loadChallenges = async () => {
     try {
       // Cargar desafíos recibidos
-      const { data: received } = await supabase
+      const { data: received, error: receivedError } = await supabase
         .from("challenges")
         .select(`
           *,
@@ -38,8 +39,12 @@ export function ChallengeManagement({ currentPlayer, onBack }: ChallengeManageme
         .eq("challenged_id", currentPlayer.id)
         .order("created_at", { ascending: false })
 
+      if (receivedError) {
+        console.error("Error loading received challenges:", receivedError)
+      }
+
       // Cargar desafíos enviados
-      const { data: sent } = await supabase
+      const { data: sent, error: sentError } = await supabase
         .from("challenges")
         .select(`
           *,
@@ -48,8 +53,12 @@ export function ChallengeManagement({ currentPlayer, onBack }: ChallengeManageme
         .eq("challenger_id", currentPlayer.id)
         .order("created_at", { ascending: false })
 
+      if (sentError) {
+        console.error("Error loading sent challenges:", sentError)
+      }
+
       // Cargar partidos completados
-      const { data: completed } = await supabase
+      const { data: completed, error: completedError } = await supabase
         .from("challenges")
         .select(`
           *,
@@ -60,6 +69,10 @@ export function ChallengeManagement({ currentPlayer, onBack }: ChallengeManageme
         .or(`challenger_id.eq.${currentPlayer.id},challenged_id.eq.${currentPlayer.id}`)
         .eq("status", "completed")
         .order("updated_at", { ascending: false })
+
+      if (completedError) {
+        console.error("Error loading completed matches:", completedError)
+      }
 
       setReceivedChallenges(received || [])
       setSentChallenges(sent || [])
@@ -72,26 +85,35 @@ export function ChallengeManagement({ currentPlayer, onBack }: ChallengeManageme
   }
 
   const handleChallengeResponse = async (challengeId: string, action: "accept" | "decline") => {
+    setMessage("")
+    setError("")
+
     try {
       const updateData: any = {
         status: action === "accept" ? "accepted" : "declined",
       }
 
-      const { error } = await supabase.from("challenges").update(updateData).eq("id", challengeId)
+      const { error: updateError } = await supabase.from("challenges").update(updateData).eq("id", challengeId)
 
-      if (error) throw error
+      if (updateError) {
+        console.error("Error updating challenge:", updateError)
+        throw new Error(`Error al ${action === "accept" ? "aceptar" : "rechazar"} el desafío`)
+      }
 
       setMessage(`Desafío ${action === "accept" ? "aceptado" : "rechazado"} correctamente`)
       loadChallenges()
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating challenge:", error)
-      setMessage("Error al actualizar desafío")
+      setError(error.message || "Error al actualizar desafío")
     }
   }
 
   const handleReportResult = async (challengeId: string, winnerId: string, score: string) => {
+    setMessage("")
+    setError("")
+
     try {
-      const { error } = await supabase
+      const { error: updateError } = await supabase
         .from("challenges")
         .update({
           status: "completed",
@@ -100,13 +122,16 @@ export function ChallengeManagement({ currentPlayer, onBack }: ChallengeManageme
         })
         .eq("id", challengeId)
 
-      if (error) throw error
+      if (updateError) {
+        console.error("Error reporting result:", updateError)
+        throw new Error("Error al reportar resultado")
+      }
 
       setMessage("Resultado reportado correctamente")
       loadChallenges()
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error reporting result:", error)
-      setMessage("Error al reportar resultado")
+      setError(error.message || "Error al reportar resultado")
     }
   }
 
@@ -132,8 +157,14 @@ export function ChallengeManagement({ currentPlayer, onBack }: ChallengeManageme
       </div>
 
       {message && (
-        <Alert className="border-blue-200 bg-blue-50">
-          <AlertDescription className="text-blue-800">{message}</AlertDescription>
+        <Alert className="border-green-200 bg-green-50">
+          <AlertDescription className="text-green-800">{message}</AlertDescription>
+        </Alert>
+      )}
+
+      {error && (
+        <Alert className="border-red-200 bg-red-50">
+          <AlertDescription className="text-red-800">{error}</AlertDescription>
         </Alert>
       )}
 
@@ -277,7 +308,7 @@ export function ChallengeManagement({ currentPlayer, onBack }: ChallengeManageme
                           {match.challenged?.last_name}
                         </p>
                         <p className="text-sm text-gray-600">
-                          {match.challenge_date} - {match.score}
+                          {match.challenge_date} - {match.score || "Sin resultado"}
                         </p>
                         {match.winner && (
                           <p className="text-sm text-green-600">

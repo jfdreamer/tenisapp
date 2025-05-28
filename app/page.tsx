@@ -5,7 +5,6 @@ import type { Player } from "@/types/tennis"
 import { AuthForm } from "@/components/auth-form"
 import { Dashboard } from "@/components/dashboard"
 import { ChallengeSystem } from "@/components/challenge-system"
-import { AvailabilityConfig } from "@/components/availability-config"
 import { Button } from "@/components/ui/button"
 import { LogOut, FileText, Crown } from "lucide-react"
 import { ChallengeManagement } from "@/components/challenge-management"
@@ -121,12 +120,6 @@ export default function TennisClubApp() {
                       Mis Desafíos
                     </Button>
                     <Button
-                      variant={currentSection === "availability" ? "default" : "ghost"}
-                      onClick={() => setCurrentSection("availability")}
-                    >
-                      Horarios
-                    </Button>
-                    <Button
                       variant={currentSection === "profile" ? "default" : "ghost"}
                       onClick={() => setCurrentSection("profile")}
                     >
@@ -176,9 +169,6 @@ export default function TennisClubApp() {
         {currentSection === "dashboard" && <Dashboard currentPlayer={currentPlayer} onNavigate={setCurrentSection} />}
         {currentSection === "challenge" && !isAdmin && (
           <ChallengeSystem currentPlayer={currentPlayer} onBack={() => setCurrentSection("dashboard")} />
-        )}
-        {currentSection === "availability" && !isAdmin && (
-          <AvailabilityConfig currentPlayer={currentPlayer} onBack={() => setCurrentSection("dashboard")} />
         )}
         {currentSection === "manage" && !isAdmin && (
           <ChallengeManagement currentPlayer={currentPlayer} onBack={() => setCurrentSection("dashboard")} />

@@ -25,6 +25,7 @@ export function ChallengeSystem({ currentPlayer, onBack }: ChallengeSystemProps)
   const [challengeTime, setChallengeTime] = useState("")
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState("")
+  const [error, setError] = useState("")
 
   useEffect(() => {
     loadAvailablePlayers()
@@ -32,14 +33,21 @@ export function ChallengeSystem({ currentPlayer, onBack }: ChallengeSystemProps)
 
   const loadAvailablePlayers = async () => {
     try {
-      // Cargar jugadores que están hasta 5 posiciones arriba
+      // Cargar jugadores que están hasta 5 posiciones arriba (excluir admin)
       const maxPosition = Math.max(1, currentPlayer.ranking_position - 5)
-      const { data: players } = await supabase
+      const { data: players, error } = await supabase
         .from("players")
         .select("*")
         .gte("ranking_position", maxPosition)
         .lt("ranking_position", currentPlayer.ranking_position)
+        .neq("is_admin", true)
+        .gt("ranking_position", 0)
         .order("ranking_position", { ascending: true })
+
+      if (error) {
+        console.error("Error loading players:", error)
+        return
+      }
 
       setAvailablePlayers(players || [])
     } catch (error) {
@@ -51,9 +59,22 @@ export function ChallengeSystem({ currentPlayer, onBack }: ChallengeSystemProps)
     e.preventDefault()
     setLoading(true)
     setMessage("")
+    setError("")
 
     try {
-      const { error } = await supabase.from("challenges").insert([
+      if (!selectedPlayer) {
+        throw new Error("Debes seleccionar un oponente")
+      }
+
+      if (!challengeDate) {
+        throw new Error("Debes seleccionar una fecha")
+      }
+
+      if (!challengeTime) {
+        throw new Error("Debes seleccionar un horario")
+      }
+
+      const { error: insertError } = await supabase.from("challenges").insert([
         {
           challenger_id: currentPlayer.id,
           challenged_id: selectedPlayer,
@@ -63,15 +84,18 @@ export function ChallengeSystem({ currentPlayer, onBack }: ChallengeSystemProps)
         },
       ])
 
-      if (error) throw error
+      if (insertError) {
+        console.error("Error creating challenge:", insertError)
+        throw new Error(`Error al crear desafío: ${insertError.message}`)
+      }
 
       setMessage("¡Desafío enviado exitosamente!")
       setSelectedPlayer("")
       setChallengeDate("")
       setChallengeTime("")
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating challenge:", error)
-      setMessage("Error al enviar el desafío")
+      setError(error.message || "Error al enviar el desafío")
     } finally {
       setLoading(false)
     }
@@ -178,8 +202,14 @@ export function ChallengeSystem({ currentPlayer, onBack }: ChallengeSystemProps)
           )}
 
           {message && (
-            <Alert className="mt-4 border-blue-200 bg-blue-50">
-              <AlertDescription className="text-blue-800">{message}</AlertDescription>
+            <Alert className="mt-4 border-green-200 bg-green-50">
+              <AlertDescription className="text-green-800">{message}</AlertDescription>
+            </Alert>
+          )}
+
+          {error && (
+            <Alert className="mt-4 border-red-200 bg-red-50">
+              <AlertDescription className="text-red-800">{error}</AlertDescription>
             </Alert>
           )}
         </CardContent>

@@ -58,11 +58,15 @@ export function AuthForm({ onAuthSuccess, onAdminLogin }: AuthFormProps) {
           .eq("email", data.user.email)
           .single()
 
-        if (playerError) throw playerError
+        if (playerError) {
+          console.error("Error obteniendo jugador:", playerError)
+          throw new Error("No se encontró el perfil del jugador")
+        }
 
         onAuthSuccess(playerData)
       }
     } catch (error: any) {
+      console.error("Error en login:", error)
       setError(error.message || "Error al iniciar sesión")
     } finally {
       setLoading(false)
@@ -76,46 +80,80 @@ export function AuthForm({ onAuthSuccess, onAdminLogin }: AuthFormProps) {
     setSuccess("")
 
     try {
-      // Registrar usuario en Supabase Auth sin confirmación de email
-      const { data, error } = await supabase.auth.signUp({
+      // Validar datos antes de enviar
+      if (
+        !registerData.email ||
+        !registerData.password ||
+        !registerData.firstName ||
+        !registerData.lastName ||
+        !registerData.rankingPosition
+      ) {
+        throw new Error("Todos los campos son obligatorios")
+      }
+
+      if (registerData.password.length < 6) {
+        throw new Error("La contraseña debe tener al menos 6 caracteres")
+      }
+
+      const rankingPos = Number.parseInt(registerData.rankingPosition)
+      if (isNaN(rankingPos) || rankingPos < 1 || rankingPos > 200) {
+        throw new Error("La posición del ranking debe ser un número entre 1 y 200")
+      }
+
+      // Registrar usuario en Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: registerData.email,
         password: registerData.password,
         options: {
-          emailRedirectTo: undefined, // Esto evita el redirect de confirmación
+          emailRedirectTo: undefined,
         },
       })
 
-      if (error) throw error
-
-      if (data.user) {
-        // Crear perfil de jugador inmediatamente
-        const { data: playerData, error: playerError } = await supabase
-          .from("players")
-          .insert([
-            {
-              email: registerData.email,
-              first_name: registerData.firstName,
-              last_name: registerData.lastName,
-              ranking_position: Number.parseInt(registerData.rankingPosition),
-            },
-          ])
-          .select()
-          .single()
-
-        if (playerError) {
-          console.error("Error creando perfil:", playerError)
-          throw new Error("Error al crear el perfil de jugador")
-        }
-
-        setSuccess("¡Registro exitoso! Ingresando al sistema...")
-
-        // Login automático inmediato
-        setTimeout(() => {
-          onAuthSuccess(playerData)
-        }, 1000)
+      if (authError) {
+        console.error("Error en auth:", authError)
+        throw authError
       }
+
+      if (!authData.user) {
+        throw new Error("No se pudo crear el usuario")
+      }
+
+      // Crear perfil de jugador
+      const playerData = {
+        email: registerData.email,
+        first_name: registerData.firstName,
+        last_name: registerData.lastName,
+        ranking_position: rankingPos,
+        is_admin: false,
+      }
+
+      console.log("Insertando jugador:", playerData)
+
+      const { data: newPlayer, error: playerError } = await supabase
+        .from("players")
+        .insert([playerData])
+        .select()
+        .single()
+
+      if (playerError) {
+        console.error("Error creando perfil:", playerError)
+        // Si falla la creación del perfil, eliminar el usuario de auth
+        await supabase.auth.admin.deleteUser(authData.user.id)
+        throw new Error(`Error al crear el perfil: ${playerError.message}`)
+      }
+
+      if (!newPlayer) {
+        throw new Error("No se pudo crear el perfil del jugador")
+      }
+
+      setSuccess("¡Registro exitoso! Ingresando al sistema...")
+
+      // Login automático
+      setTimeout(() => {
+        onAuthSuccess(newPlayer)
+      }, 1500)
     } catch (error: any) {
-      console.error("Error completo:", error)
+      console.error("Error completo en registro:", error)
       setError(error.message || "Error al registrarse")
     } finally {
       setLoading(false)
