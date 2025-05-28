@@ -1,12 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { supabase } from "@/lib/supabase"
-import type { Player } from "@/types/tennis"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { useToast } from "@/hooks/use-toast"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ArrowLeft, Calendar, Info } from "lucide-react"
+import type { Player } from "@/types/tennis"
+import { supabase } from "@/lib/supabase"
 
 interface AvailabilityConfigProps {
   currentPlayer: Player
@@ -14,20 +15,9 @@ interface AvailabilityConfigProps {
 }
 
 export function AvailabilityConfig({ currentPlayer, onBack }: AvailabilityConfigProps) {
-  const [availability, setAvailability] = useState<Record<string, boolean>>({})
+  const [availability, setAvailability] = useState<{ [key: string]: boolean }>({})
   const [loading, setLoading] = useState(false)
-  const [loadingData, setLoadingData] = useState(true)
-  const { toast } = useToast()
-
-  const days = [
-    { id: 1, name: "Lunes" },
-    { id: 2, name: "Martes" },
-    { id: 3, name: "Miércoles" },
-    { id: 4, name: "Jueves" },
-    { id: 5, name: "Viernes" },
-    { id: 6, name: "Sábado" },
-    { id: 0, name: "Domingo" },
-  ]
+  const [message, setMessage] = useState("")
 
   const timeSlots = [
     "08:00-10:00",
@@ -39,135 +29,93 @@ export function AvailabilityConfig({ currentPlayer, onBack }: AvailabilityConfig
     "20:00-22:00",
   ]
 
+  const days = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+
   useEffect(() => {
-    loadCurrentAvailability()
+    loadAvailability()
   }, [currentPlayer])
 
-  const loadCurrentAvailability = async () => {
+  const loadAvailability = async () => {
     try {
-      setLoadingData(true)
-      console.log("Cargando disponibilidad para jugador:", currentPlayer.id)
-
-      const { data, error } = await supabase.from("availability").select("*").eq("player_id", currentPlayer.id)
-
-      if (error) {
-        console.error("Error loading availability:", error)
-        throw error
-      }
-
-      console.log("Datos de disponibilidad cargados:", data)
+      const { data } = await supabase.from("availability").select("*").eq("player_id", currentPlayer.id)
 
       if (data) {
-        const availabilityMap: Record<string, boolean> = {}
+        const availabilityMap: { [key: string]: boolean } = {}
         data.forEach((slot) => {
-          // Convertir formato de tiempo de "HH:MM:SS" a "HH:MM"
-          const startTime = slot.start_time.substring(0, 5) // "10:00:00" -> "10:00"
-          const endTime = slot.end_time.substring(0, 5) // "12:00:00" -> "12:00"
-          const key = `${slot.day_of_week}-${startTime}-${endTime}`
+          const key = `${slot.day_of_week}-${slot.start_time}-${slot.end_time}`
           availabilityMap[key] = true
-          console.log("Marcando disponible:", key)
         })
         setAvailability(availabilityMap)
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error loading availability:", error)
-      toast({
-        title: "Error",
-        description: "No se pudo cargar la disponibilidad",
-        variant: "destructive",
-      })
-    } finally {
-      setLoadingData(false)
     }
   }
 
-  const toggleAvailability = (day: number, timeSlot: string) => {
-    const [startTime, endTime] = timeSlot.split("-")
-    const key = `${day}-${startTime}-${endTime}`
-
+  const handleAvailabilityChange = (day: string, timeSlot: string, checked: boolean) => {
+    const key = `${day}-${timeSlot}`
     setAvailability((prev) => ({
       ...prev,
-      [key]: !prev[key],
+      [key]: checked,
     }))
   }
 
-  const saveAvailability = async () => {
+  const handleSaveAvailability = async () => {
     setLoading(true)
+    setMessage("")
+
     try {
-      console.log("Guardando disponibilidad para jugador:", currentPlayer.id)
+      // Primero eliminar disponibilidad existente
+      await supabase.from("availability").delete().eq("player_id", currentPlayer.id)
 
-      // Eliminar disponibilidad actual
-      const { error: deleteError } = await supabase.from("availability").delete().eq("player_id", currentPlayer.id)
-
-      if (deleteError) {
-        console.error("Error eliminando disponibilidad:", deleteError)
-        throw deleteError
-      }
-
-      // Insertar nueva disponibilidad
-      const newAvailability = Object.entries(availability)
+      // Luego insertar nueva disponibilidad
+      const availabilityData = Object.entries(availability)
         .filter(([_, isAvailable]) => isAvailable)
         .map(([key, _]) => {
-          const [day, startTime, endTime] = key.split("-")
+          const [dayIndex, timeSlot] = key.split("-")
+          const [startTime, endTime] = timeSlot.split("-")
           return {
             player_id: currentPlayer.id,
-            day_of_week: Number.parseInt(day),
+            day_of_week: Number.parseInt(dayIndex),
             start_time: startTime,
             end_time: endTime,
           }
         })
 
-      console.log("Insertando nueva disponibilidad:", newAvailability)
-
-      if (newAvailability.length > 0) {
-        const { error: insertError } = await supabase.from("availability").insert(newAvailability)
-
-        if (insertError) {
-          console.error("Error insertando disponibilidad:", insertError)
-          throw insertError
-        }
+      if (availabilityData.length > 0) {
+        const { error } = await supabase.from("availability").insert(availabilityData)
+        if (error) throw error
       }
 
-      toast({
-        title: "¡Disponibilidad guardada!",
-        description: "Tu disponibilidad ha sido actualizada correctamente",
-      })
-    } catch (error: any) {
+      setMessage("Disponibilidad guardada correctamente")
+    } catch (error) {
       console.error("Error saving availability:", error)
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      })
+      setMessage("Error al guardar disponibilidad")
     } finally {
       setLoading(false)
     }
   }
 
-  if (loadingData) {
-    return (
-      <div className="flex justify-center items-center p-8">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Cargando disponibilidad...</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-green-700">📅 Configurar Disponibilidad</h2>
+      <div className="flex items-center gap-4">
         <Button variant="outline" onClick={onBack}>
-          ← Volver
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Volver
         </Button>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">📅 Configurar Disponibilidad</h1>
+          <p className="text-gray-600">Marca los días y horarios en los que puedes jugar</p>
+        </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Tu Disponibilidad Semanal</CardTitle>
-          <CardDescription>Marca los días y horarios en los que puedes jugar</CardDescription>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            Tu Disponibilidad Semanal
+          </CardTitle>
+          <p className="text-sm text-gray-600">Marca las casillas donde puedas jugar</p>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -183,17 +131,18 @@ export function AvailabilityConfig({ currentPlayer, onBack }: AvailabilityConfig
                 </tr>
               </thead>
               <tbody>
-                {days.map((day) => (
-                  <tr key={day.id}>
-                    <td className="p-2 border-b font-medium">{day.name}</td>
-                    {timeSlots.map((slot) => {
-                      const [startTime, endTime] = slot.split("-")
-                      const key = `${day.id}-${startTime}-${endTime}`
+                {days.map((day, dayIndex) => (
+                  <tr key={day}>
+                    <td className="p-2 border-b font-medium">{day}</td>
+                    {timeSlots.map((timeSlot) => {
+                      const key = `${dayIndex}-${timeSlot}`
                       return (
-                        <td key={slot} className="p-2 border-b text-center">
+                        <td key={timeSlot} className="text-center p-2 border-b">
                           <Checkbox
                             checked={availability[key] || false}
-                            onCheckedChange={() => toggleAvailability(day.id, slot)}
+                            onCheckedChange={(checked) =>
+                              handleAvailabilityChange(String(dayIndex), timeSlot, checked as boolean)
+                            }
                           />
                         </td>
                       )
@@ -204,24 +153,30 @@ export function AvailabilityConfig({ currentPlayer, onBack }: AvailabilityConfig
             </table>
           </div>
 
-          <div className="mt-6 flex justify-end">
-            <Button onClick={saveAvailability} disabled={loading}>
+          <div className="mt-6">
+            <Button onClick={handleSaveAvailability} disabled={loading} className="w-full">
               {loading ? "Guardando..." : "Guardar Disponibilidad"}
             </Button>
           </div>
+
+          {message && (
+            <Alert className="mt-4 border-blue-200 bg-blue-50">
+              <AlertDescription className="text-blue-800">{message}</AlertDescription>
+            </Alert>
+          )}
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Instrucciones</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2 text-sm text-gray-600">
-            <p>• Marca todas las casillas donde puedas jugar</p>
-            <p>• Esta información se usará para encontrar horarios compatibles</p>
-            <p>• Puedes actualizar tu disponibilidad cuando quieras</p>
-            <p>• Los otros jugadores verán solo los horarios donde ambos están disponibles</p>
+      <Card className="bg-blue-50 border-blue-200">
+        <CardContent className="pt-6">
+          <div className="flex items-start gap-3">
+            <Info className="h-5 w-5 text-blue-600 mt-0.5" />
+            <div className="space-y-2 text-sm text-blue-800">
+              <p>• Marca todas las casillas donde puedas jugar</p>
+              <p>• Esta información se usará para encontrar horarios compatibles</p>
+              <p>• Puedes actualizar tu disponibilidad cuando quieras</p>
+              <p>• Los otros jugadores verán solo los horarios donde ambos están disponibles</p>
+            </div>
           </div>
         </CardContent>
       </Card>

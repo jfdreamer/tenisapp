@@ -1,13 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { supabase } from "@/lib/supabase"
-import type { Player } from "@/types/tennis"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { useToast } from "@/hooks/use-toast"
-import { CheckCircle, XCircle, Trophy, Clock } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ArrowLeft, Clock, Send, Trophy, CheckCircle, XCircle } from "lucide-react"
+import type { Player, Challenge } from "@/types/tennis"
+import { supabase } from "@/lib/supabase"
 
 interface ChallengeManagementProps {
   currentPlayer: Player
@@ -15,11 +16,11 @@ interface ChallengeManagementProps {
 }
 
 export function ChallengeManagement({ currentPlayer, onBack }: ChallengeManagementProps) {
-  const [receivedChallenges, setReceivedChallenges] = useState<any[]>([])
-  const [sentChallenges, setSentChallenges] = useState<any[]>([])
-  const [completedChallenges, setCompletedChallenges] = useState<any[]>([])
+  const [receivedChallenges, setReceivedChallenges] = useState<Challenge[]>([])
+  const [sentChallenges, setSentChallenges] = useState<Challenge[]>([])
+  const [completedMatches, setCompletedMatches] = useState<Challenge[]>([])
   const [loading, setLoading] = useState(true)
-  const { toast } = useToast()
+  const [message, setMessage] = useState("")
 
   useEffect(() => {
     loadChallenges()
@@ -27,29 +28,27 @@ export function ChallengeManagement({ currentPlayer, onBack }: ChallengeManageme
 
   const loadChallenges = async () => {
     try {
-      // Desafíos recibidos
+      // Cargar desafíos recibidos
       const { data: received } = await supabase
         .from("challenges")
         .select(`
           *,
-          challenger:challenger_id(first_name, last_name, ranking_position),
-          challenged:challenged_id(first_name, last_name, ranking_position)
+          challenger:challenger_id(first_name, last_name, ranking_position)
         `)
         .eq("challenged_id", currentPlayer.id)
-        .eq("status", "pending")
+        .order("created_at", { ascending: false })
 
-      // Desafíos enviados
+      // Cargar desafíos enviados
       const { data: sent } = await supabase
         .from("challenges")
         .select(`
           *,
-          challenger:challenger_id(first_name, last_name, ranking_position),
           challenged:challenged_id(first_name, last_name, ranking_position)
         `)
         .eq("challenger_id", currentPlayer.id)
-        .in("status", ["pending", "accepted"])
+        .order("created_at", { ascending: false })
 
-      // Desafíos completados
+      // Cargar partidos completados
       const { data: completed } = await supabase
         .from("challenges")
         .select(`
@@ -60,12 +59,11 @@ export function ChallengeManagement({ currentPlayer, onBack }: ChallengeManageme
         `)
         .or(`challenger_id.eq.${currentPlayer.id},challenged_id.eq.${currentPlayer.id}`)
         .eq("status", "completed")
-        .order("completed_at", { ascending: false })
-        .limit(10)
+        .order("updated_at", { ascending: false })
 
       setReceivedChallenges(received || [])
       setSentChallenges(sent || [])
-      setCompletedChallenges(completed || [])
+      setCompletedMatches(completed || [])
     } catch (error) {
       console.error("Error loading challenges:", error)
     } finally {
@@ -73,222 +71,230 @@ export function ChallengeManagement({ currentPlayer, onBack }: ChallengeManageme
     }
   }
 
-  const respondToChallenge = async (challengeId: string, accept: boolean) => {
+  const handleChallengeResponse = async (challengeId: string, action: "accept" | "decline") => {
     try {
-      if (accept) {
-        const { error } = await supabase.from("challenges").update({ status: "accepted" }).eq("id", challengeId)
-
-        if (error) throw error
-
-        toast({
-          title: "Desafío aceptado",
-          description: "Has aceptado el desafío. ¡A jugar!",
-        })
-      } else {
-        const { error } = await supabase.from("challenges").update({ status: "rejected" }).eq("id", challengeId)
-
-        if (error) throw error
-
-        toast({
-          title: "Desafío rechazado",
-          description: "Has rechazado el desafío.",
-        })
+      const updateData: any = {
+        status: action === "accept" ? "accepted" : "declined",
       }
 
+      const { error } = await supabase.from("challenges").update(updateData).eq("id", challengeId)
+
+      if (error) throw error
+
+      setMessage(`Desafío ${action === "accept" ? "aceptado" : "rechazado"} correctamente`)
       loadChallenges()
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      })
+    } catch (error) {
+      console.error("Error updating challenge:", error)
+      setMessage("Error al actualizar desafío")
     }
   }
 
-  const reportResult = async (challengeId: string, winnerId: string) => {
+  const handleReportResult = async (challengeId: string, winnerId: string, score: string) => {
     try {
       const { error } = await supabase
         .from("challenges")
         .update({
           status: "completed",
           winner_id: winnerId,
-          completed_at: new Date().toISOString(),
+          score: score,
         })
         .eq("id", challengeId)
 
       if (error) throw error
 
-      toast({
-        title: "Resultado reportado",
-        description: "El resultado ha sido registrado exitosamente",
-      })
-
+      setMessage("Resultado reportado correctamente")
       loadChallenges()
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      })
+    } catch (error) {
+      console.error("Error reporting result:", error)
+      setMessage("Error al reportar resultado")
     }
   }
 
   if (loading) {
-    return <div className="flex justify-center p-8">Cargando desafíos...</div>
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-blue-700">⚔️ Gestión de Desafíos</h2>
+      <div className="flex items-center gap-4">
         <Button variant="outline" onClick={onBack}>
-          ← Volver
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Volver
         </Button>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">⚔️ Gestión de Desafíos</h1>
+          <p className="text-gray-600">Administra tus desafíos enviados y recibidos</p>
+        </div>
       </div>
 
-      {/* Desafíos Recibidos */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5" />
-            Desafíos Recibidos ({receivedChallenges.length})
-          </CardTitle>
-          <CardDescription>Desafíos que otros jugadores te han enviado</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {receivedChallenges.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">No tienes desafíos pendientes</p>
-          ) : (
-            <div className="space-y-4">
-              {receivedChallenges.map((challenge) => (
-                <div key={challenge.id} className="border rounded-lg p-4">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <p className="font-medium">
-                        {challenge.challenger?.first_name} {challenge.challenger?.last_name}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        Posición #{challenge.challenger?.ranking_position} te desafía
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        📅 {new Date(challenge.challenge_date).toLocaleDateString()} - {challenge.challenge_time}
-                      </p>
-                    </div>
-                    <Badge variant="secondary">Pendiente</Badge>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => respondToChallenge(challenge.id, true)}
-                      className="flex items-center gap-1"
-                    >
-                      <CheckCircle className="h-4 w-4" />
-                      Aceptar
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => respondToChallenge(challenge.id, false)}
-                      className="flex items-center gap-1"
-                    >
-                      <XCircle className="h-4 w-4" />
-                      Rechazar
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {message && (
+        <Alert className="border-blue-200 bg-blue-50">
+          <AlertDescription className="text-blue-800">{message}</AlertDescription>
+        </Alert>
+      )}
 
-      {/* Desafíos Enviados */}
-      <Card>
-        <CardHeader>
-          <CardTitle>📤 Desafíos Enviados ({sentChallenges.length})</CardTitle>
-          <CardDescription>Desafíos que has enviado a otros jugadores</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {sentChallenges.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">No has enviado desafíos</p>
-          ) : (
-            <div className="space-y-4">
-              {sentChallenges.map((challenge) => (
-                <div key={challenge.id} className="border rounded-lg p-4">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <p className="font-medium">
-                        Desafiaste a {challenge.challenged?.first_name} {challenge.challenged?.last_name}
-                      </p>
-                      <p className="text-sm text-gray-600">Posición #{challenge.challenged?.ranking_position}</p>
-                      <p className="text-sm text-gray-600">
-                        📅 {new Date(challenge.challenge_date).toLocaleDateString()} - {challenge.challenge_time}
-                      </p>
-                    </div>
-                    <Badge variant={challenge.status === "accepted" ? "default" : "secondary"}>
-                      {challenge.status === "accepted" ? "Aceptado" : "Pendiente"}
-                    </Badge>
-                  </div>
-                  {challenge.status === "accepted" && (
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={() => reportResult(challenge.id, currentPlayer.id)} variant="default">
-                        Gané yo
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => reportResult(challenge.id, challenge.challenged_id)}
-                        variant="outline"
-                      >
-                        Ganó {challenge.challenged?.first_name}
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="received" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="received">
+            <Clock className="h-4 w-4 mr-2" />
+            Desafíos Recibidos ({receivedChallenges.filter((c) => c.status === "pending").length})
+          </TabsTrigger>
+          <TabsTrigger value="sent">
+            <Send className="h-4 w-4 mr-2" />
+            Desafíos Enviados ({sentChallenges.length})
+          </TabsTrigger>
+          <TabsTrigger value="history">
+            <Trophy className="h-4 w-4 mr-2" />
+            Historial de Partidos ({completedMatches.length})
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Historial de Partidos */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Trophy className="h-5 w-5" />
-            Historial de Partidos
-          </CardTitle>
-          <CardDescription>Últimos partidos completados</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {completedChallenges.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">No hay partidos completados</p>
-          ) : (
-            <div className="space-y-3">
-              {completedChallenges.map((challenge) => {
-                const isWinner = challenge.winner_id === currentPlayer.id
-                const opponent =
-                  challenge.challenger_id === currentPlayer.id ? challenge.challenged : challenge.challenger
-
-                return (
-                  <div key={challenge.id} className="border rounded-lg p-3">
-                    <div className="flex justify-between items-center">
+        <TabsContent value="received" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Desafíos Recibidos</CardTitle>
+              <p className="text-sm text-gray-600">Desafíos que otros jugadores te han enviado</p>
+            </CardHeader>
+            <CardContent>
+              {receivedChallenges.length === 0 ? (
+                <p className="text-center text-gray-500 py-8">No tienes desafíos pendientes</p>
+              ) : (
+                <div className="space-y-4">
+                  {receivedChallenges.map((challenge) => (
+                    <div key={challenge.id} className="flex items-center justify-between p-4 border rounded-lg">
                       <div>
                         <p className="font-medium">
-                          vs {opponent?.first_name} {opponent?.last_name}
+                          {challenge.challenger?.first_name} {challenge.challenger?.last_name}
                         </p>
+                        <p className="text-sm text-gray-600">Ranking #{challenge.challenger?.ranking_position}</p>
                         <p className="text-sm text-gray-600">
-                          {new Date(challenge.challenge_date).toLocaleDateString()}
+                          {challenge.challenge_date} a las {challenge.challenge_time}
                         </p>
                       </div>
-                      <Badge variant={isWinner ? "default" : "secondary"}>{isWinner ? "Victoria" : "Derrota"}</Badge>
+
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant={
+                            challenge.status === "pending"
+                              ? "secondary"
+                              : challenge.status === "accepted"
+                                ? "default"
+                                : "destructive"
+                          }
+                        >
+                          {challenge.status}
+                        </Badge>
+
+                        {challenge.status === "pending" && (
+                          <div className="flex gap-2">
+                            <Button size="sm" onClick={() => handleChallengeResponse(challenge.id, "accept")}>
+                              <CheckCircle className="h-4 w-4 mr-1" />
+                              Aceptar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleChallengeResponse(challenge.id, "decline")}
+                            >
+                              <XCircle className="h-4 w-4 mr-1" />
+                              Rechazar
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="sent" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Desafíos Enviados</CardTitle>
+              <p className="text-sm text-gray-600">Desafíos que has enviado a otros jugadores</p>
+            </CardHeader>
+            <CardContent>
+              {sentChallenges.length === 0 ? (
+                <p className="text-center text-gray-500 py-8">No has enviado desafíos</p>
+              ) : (
+                <div className="space-y-4">
+                  {sentChallenges.map((challenge) => (
+                    <div key={challenge.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div>
+                        <p className="font-medium">
+                          {challenge.challenged?.first_name} {challenge.challenged?.last_name}
+                        </p>
+                        <p className="text-sm text-gray-600">Ranking #{challenge.challenged?.ranking_position}</p>
+                        <p className="text-sm text-gray-600">
+                          {challenge.challenge_date} a las {challenge.challenge_time}
+                        </p>
+                      </div>
+
+                      <Badge
+                        variant={
+                          challenge.status === "pending"
+                            ? "secondary"
+                            : challenge.status === "accepted"
+                              ? "default"
+                              : challenge.status === "completed"
+                                ? "default"
+                                : "destructive"
+                        }
+                      >
+                        {challenge.status}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="history" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Historial de Partidos</CardTitle>
+              <p className="text-sm text-gray-600">Últimos partidos completados</p>
+            </CardHeader>
+            <CardContent>
+              {completedMatches.length === 0 ? (
+                <p className="text-center text-gray-500 py-8">No hay partidos completados</p>
+              ) : (
+                <div className="space-y-4">
+                  {completedMatches.map((match) => (
+                    <div key={match.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div>
+                        <p className="font-medium">
+                          {match.challenger?.first_name} {match.challenger?.last_name} vs {match.challenged?.first_name}{" "}
+                          {match.challenged?.last_name}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          {match.challenge_date} - {match.score}
+                        </p>
+                        {match.winner && (
+                          <p className="text-sm text-green-600">
+                            Ganador: {match.winner.first_name} {match.winner.last_name}
+                          </p>
+                        )}
+                      </div>
+
+                      <Badge variant="default">Completado</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

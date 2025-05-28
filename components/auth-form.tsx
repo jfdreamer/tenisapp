@@ -2,196 +2,258 @@
 
 import type React from "react"
 import { useState } from "react"
-import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
-import { useToast } from "@/hooks/use-toast"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Crown } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import type { Player } from "@/types/tennis"
+import { AdminLogin } from "./admin-login"
 
 interface AuthFormProps {
-  onAuthSuccess: (player: any) => void
+  onAuthSuccess: (player: Player) => void
+  onAdminLogin: () => void
 }
 
-export function AuthForm({ onAuthSuccess }: AuthFormProps) {
-  const [isLogin, setIsLogin] = useState(true)
-  const [email, setEmail] = useState("juanfras@gmail.com")
-  const [password, setPassword] = useState("")
-  const [firstName, setFirstName] = useState("")
-  const [lastName, setLastName] = useState("")
-  const [rankingPosition, setRankingPosition] = useState("15")
+export function AuthForm({ onAuthSuccess, onAdminLogin }: AuthFormProps) {
   const [loading, setLoading] = useState(false)
-  const { toast } = useToast()
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
+  const [showAdminLogin, setShowAdminLogin] = useState(false)
 
-  const handleAuth = async (e: React.FormEvent) => {
+  const [loginData, setLoginData] = useState({
+    email: "",
+    password: "",
+  })
+
+  const [registerData, setRegisterData] = useState({
+    email: "",
+    password: "",
+    firstName: "",
+    lastName: "",
+    rankingPosition: "",
+  })
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+    setError("")
 
     try {
-      if (isLogin) {
-        // Login
-        console.log("Intentando login con:", email)
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: loginData.email,
+        password: loginData.password,
+      })
 
-        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        })
+      if (error) throw error
 
-        if (authError) {
-          console.error("Error de login:", authError)
-          throw new Error(`Error de login: ${authError.message}`)
-        }
-
-        console.log("Login exitoso:", authData.user?.id)
-
+      if (data.user) {
         // Obtener datos del jugador
         const { data: playerData, error: playerError } = await supabase
           .from("players")
           .select("*")
-          .eq("email", email)
+          .eq("email", data.user.email)
           .single()
 
-        if (playerError) {
-          console.error("Error obteniendo jugador:", playerError)
-          throw new Error("No se encontró el perfil del jugador")
-        }
+        if (playerError) throw playerError
 
-        console.log("Jugador encontrado:", playerData)
-        toast({ title: "¡Bienvenido de vuelta!" })
-        onAuthSuccess(playerData)
-      } else {
-        // Registro
-        console.log("Intentando registro con:", { email, firstName, lastName, rankingPosition })
-
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-          email,
-          password,
-        })
-
-        if (authError) {
-          console.error("Error de registro auth:", authError)
-          throw new Error(`Error de registro: ${authError.message}`)
-        }
-
-        console.log("Usuario auth creado:", authData.user?.id)
-
-        // Crear perfil del jugador
-        const { data: playerData, error: playerError } = await supabase
-          .from("players")
-          .insert({
-            email,
-            first_name: firstName,
-            last_name: lastName,
-            ranking_position: Number.parseInt(rankingPosition),
-          })
-          .select()
-          .single()
-
-        if (playerError) {
-          console.error("Error creando perfil:", playerError)
-          throw new Error(`Error creando perfil: ${playerError.message}`)
-        }
-
-        console.log("Perfil creado:", playerData)
-        toast({ title: "¡Cuenta creada exitosamente!" })
         onAuthSuccess(playerData)
       }
     } catch (error: any) {
-      console.error("Auth error:", error)
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      })
+      setError(error.message || "Error al iniciar sesión")
     } finally {
       setLoading(false)
     }
   }
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-gray-50 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="flex justify-center mb-4">
-            <img src="/images/btc-logo.png" alt="BTC Logo" className="h-24 w-auto" />
-          </div>
-          <CardDescription>{isLogin ? "Inicia sesión" : "Crear cuenta nueva"}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleAuth} className="space-y-4">
-            {!isLogin && (
-              <>
-                <div className="space-y-2">
-                  <Label>Nombre</Label>
-                  <Input
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    placeholder="Tu nombre"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Apellido</Label>
-                  <Input
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    placeholder="Tu apellido"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Posición Ranking</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    max="200"
-                    value={rankingPosition}
-                    onChange={(e) => setRankingPosition(e.target.value)}
-                    placeholder="Tu posición inicial"
-                    required
-                  />
-                </div>
-              </>
-            )}
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="tu@email.com"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Contraseña</Label>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Tu contraseña"
-                required
-                minLength={6}
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Procesando..." : isLogin ? "Entrar" : "Crear Cuenta"}
-            </Button>
-          </form>
-          <div className="mt-4 text-center">
-            <Button variant="link" onClick={() => setIsLogin(!isLogin)}>
-              {isLogin ? "¿No tienes cuenta? Crear una" : "¿Ya tienes cuenta? Iniciar sesión"}
-            </Button>
-          </div>
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError("")
+    setSuccess("")
 
-          {/* Información de ayuda */}
-          <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
-            <p className="font-medium text-blue-800">Usuario existente:</p>
-            <p className="text-blue-700">Email: juanfras@gmail.com</p>
-            <p className="text-blue-700">Usa tu contraseña</p>
-          </div>
-        </CardContent>
-      </Card>
+    try {
+      // Registrar usuario en Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
+        email: registerData.email,
+        password: registerData.password,
+      })
+
+      if (error) throw error
+
+      if (data.user) {
+        // Crear perfil de jugador
+        const { data: playerData, error: playerError } = await supabase
+          .from("players")
+          .insert([
+            {
+              email: registerData.email,
+              first_name: registerData.firstName,
+              last_name: registerData.lastName,
+              ranking_position: Number.parseInt(registerData.rankingPosition),
+            },
+          ])
+          .select()
+          .single()
+
+        if (playerError) throw playerError
+
+        setSuccess("Registro exitoso. Por favor verifica tu email.")
+
+        // Auto login después del registro
+        setTimeout(() => {
+          onAuthSuccess(playerData)
+        }, 2000)
+      }
+    } catch (error: any) {
+      setError(error.message || "Error al registrarse")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (showAdminLogin) {
+    return <AdminLogin onAdminLogin={onAdminLogin} onBack={() => setShowAdminLogin(false)} />
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8">
+        <div className="text-center">
+          <img src="/images/btc-logo.png" alt="Belgrano Tennis Challenge" className="mx-auto h-20 w-auto" />
+          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">Belgrano Tennis Challenge</h2>
+          <p className="mt-2 text-sm text-gray-600">Sistema de Desafíos de Tenis</p>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Acceso al Sistema</CardTitle>
+            <CardDescription>Inicia sesión o regístrate para participar en los desafíos</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="login" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="login">Iniciar Sesión</TabsTrigger>
+                <TabsTrigger value="register">Registrarse</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="login" className="space-y-4">
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={loginData.email}
+                      onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Contraseña</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={loginData.password}
+                      onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? "Iniciando sesión..." : "Iniciar Sesión"}
+                  </Button>
+                </form>
+              </TabsContent>
+
+              <TabsContent value="register" className="space-y-4">
+                <form onSubmit={handleRegister} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="firstName">Nombre</Label>
+                      <Input
+                        id="firstName"
+                        value={registerData.firstName}
+                        onChange={(e) => setRegisterData({ ...registerData, firstName: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lastName">Apellido</Label>
+                      <Input
+                        id="lastName"
+                        value={registerData.lastName}
+                        onChange={(e) => setRegisterData({ ...registerData, lastName: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="registerEmail">Email</Label>
+                    <Input
+                      id="registerEmail"
+                      type="email"
+                      value={registerData.email}
+                      onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="registerPassword">Contraseña</Label>
+                    <Input
+                      id="registerPassword"
+                      type="password"
+                      value={registerData.password}
+                      onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="rankingPosition">Posición en Ranking Actual</Label>
+                    <Input
+                      id="rankingPosition"
+                      type="number"
+                      min="1"
+                      max="200"
+                      value={registerData.rankingPosition}
+                      onChange={(e) => setRegisterData({ ...registerData, rankingPosition: e.target.value })}
+                      placeholder="Ej: 15"
+                      required
+                    />
+                    <p className="text-xs text-gray-500">
+                      Ingresa tu posición actual aproximada en el ranking del club
+                    </p>
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? "Registrando..." : "Registrarse"}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
+
+            {error && (
+              <Alert className="mt-4 border-red-200 bg-red-50">
+                <AlertDescription className="text-red-800">{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {success && (
+              <Alert className="mt-4 border-green-200 bg-green-50">
+                <AlertDescription className="text-green-800">{success}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="mt-6 pt-4 border-t">
+              <Button variant="outline" onClick={() => setShowAdminLogin(true)} className="w-full">
+                <Crown className="h-4 w-4 mr-2" />
+                Acceso de Administrador
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

@@ -7,18 +7,22 @@ import { Dashboard } from "@/components/dashboard"
 import { ChallengeSystem } from "@/components/challenge-system"
 import { AvailabilityConfig } from "@/components/availability-config"
 import { Button } from "@/components/ui/button"
-import { LogOut } from "lucide-react"
+import { LogOut, FileText, Crown } from "lucide-react"
 import { ChallengeManagement } from "@/components/challenge-management"
 import { ProfileEditor } from "@/components/profile-editor"
+import { Regulations } from "@/components/regulations"
+import { AdminPanel } from "@/components/admin-panel"
 import { supabase } from "@/lib/supabase"
 
 export default function TennisClubApp() {
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null)
   const [currentSection, setCurrentSection] = useState("dashboard")
   const [loading, setLoading] = useState(true)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
     checkUser()
+    checkAdminStatus()
   }, [])
 
   const checkUser = async () => {
@@ -42,13 +46,34 @@ export default function TennisClubApp() {
     }
   }
 
+  const checkAdminStatus = () => {
+    const adminStatus = localStorage.getItem("isAdmin")
+    setIsAdmin(adminStatus === "true")
+  }
+
   const handleLogin = (player: Player) => {
     setCurrentPlayer(player)
   }
 
+  const handleAdminLogin = () => {
+    setIsAdmin(true)
+    setCurrentPlayer({
+      id: "admin",
+      email: "admin@btc.com",
+      first_name: "Administrador",
+      last_name: "BTC",
+      ranking_position: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      is_admin: true,
+    })
+  }
+
   const handleSignOut = async () => {
     await supabase.auth.signOut()
+    localStorage.removeItem("isAdmin")
     setCurrentPlayer(null)
+    setIsAdmin(false)
     setCurrentSection("dashboard")
   }
 
@@ -64,7 +89,7 @@ export default function TennisClubApp() {
   }
 
   if (!currentPlayer) {
-    return <AuthForm onAuthSuccess={handleLogin} />
+    return <AuthForm onAuthSuccess={handleLogin} onAdminLogin={handleAdminLogin} />
   }
 
   return (
@@ -81,35 +106,62 @@ export default function TennisClubApp() {
                 >
                   Dashboard
                 </Button>
+                {!isAdmin && (
+                  <>
+                    <Button
+                      variant={currentSection === "challenge" ? "default" : "ghost"}
+                      onClick={() => setCurrentSection("challenge")}
+                    >
+                      Desafiar
+                    </Button>
+                    <Button
+                      variant={currentSection === "manage" ? "default" : "ghost"}
+                      onClick={() => setCurrentSection("manage")}
+                    >
+                      Mis Desafíos
+                    </Button>
+                    <Button
+                      variant={currentSection === "availability" ? "default" : "ghost"}
+                      onClick={() => setCurrentSection("availability")}
+                    >
+                      Horarios
+                    </Button>
+                    <Button
+                      variant={currentSection === "profile" ? "default" : "ghost"}
+                      onClick={() => setCurrentSection("profile")}
+                    >
+                      Mi Perfil
+                    </Button>
+                  </>
+                )}
                 <Button
-                  variant={currentSection === "challenge" ? "default" : "ghost"}
-                  onClick={() => setCurrentSection("challenge")}
+                  variant={currentSection === "regulations" ? "default" : "ghost"}
+                  onClick={() => setCurrentSection("regulations")}
                 >
-                  Desafiar
+                  <FileText className="h-4 w-4 mr-2" />
+                  Reglamento
                 </Button>
-                <Button
-                  variant={currentSection === "manage" ? "default" : "ghost"}
-                  onClick={() => setCurrentSection("manage")}
-                >
-                  Mis Desafíos
-                </Button>
-                <Button
-                  variant={currentSection === "availability" ? "default" : "ghost"}
-                  onClick={() => setCurrentSection("availability")}
-                >
-                  Horarios
-                </Button>
-                <Button
-                  variant={currentSection === "profile" ? "default" : "ghost"}
-                  onClick={() => setCurrentSection("profile")}
-                >
-                  Mi Perfil
-                </Button>
+                {isAdmin && (
+                  <Button
+                    variant={currentSection === "admin" ? "default" : "ghost"}
+                    onClick={() => setCurrentSection("admin")}
+                  >
+                    <Crown className="h-4 w-4 mr-2" />
+                    Panel Admin
+                  </Button>
+                )}
               </nav>
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-600">
-                {currentPlayer.first_name} #{currentPlayer.ranking_position}
+                {isAdmin ? (
+                  <span className="flex items-center gap-1">
+                    <Crown className="h-4 w-4 text-yellow-500" />
+                    Administrador
+                  </span>
+                ) : (
+                  `${currentPlayer.first_name} #${currentPlayer.ranking_position}`
+                )}
               </span>
               <Button variant="outline" onClick={handleSignOut}>
                 <LogOut className="h-4 w-4 mr-2" />
@@ -122,21 +174,25 @@ export default function TennisClubApp() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {currentSection === "dashboard" && <Dashboard currentPlayer={currentPlayer} onNavigate={setCurrentSection} />}
-        {currentSection === "challenge" && (
+        {currentSection === "challenge" && !isAdmin && (
           <ChallengeSystem currentPlayer={currentPlayer} onBack={() => setCurrentSection("dashboard")} />
         )}
-        {currentSection === "availability" && (
+        {currentSection === "availability" && !isAdmin && (
           <AvailabilityConfig currentPlayer={currentPlayer} onBack={() => setCurrentSection("dashboard")} />
         )}
-        {currentSection === "manage" && (
+        {currentSection === "manage" && !isAdmin && (
           <ChallengeManagement currentPlayer={currentPlayer} onBack={() => setCurrentSection("dashboard")} />
         )}
-        {currentSection === "profile" && (
+        {currentSection === "regulations" && <Regulations onBack={() => setCurrentSection("dashboard")} />}
+        {currentSection === "profile" && !isAdmin && (
           <ProfileEditor
             currentPlayer={currentPlayer}
             onBack={() => setCurrentSection("dashboard")}
             onPlayerUpdate={setCurrentPlayer}
           />
+        )}
+        {currentSection === "admin" && isAdmin && (
+          <AdminPanel currentPlayer={currentPlayer} onBack={() => setCurrentSection("dashboard")} />
         )}
       </main>
     </div>
