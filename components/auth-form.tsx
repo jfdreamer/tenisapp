@@ -76,16 +76,19 @@ export function AuthForm({ onAuthSuccess, onAdminLogin }: AuthFormProps) {
     setSuccess("")
 
     try {
-      // Registrar usuario en Supabase Auth
+      // Registrar usuario en Supabase Auth sin confirmación de email
       const { data, error } = await supabase.auth.signUp({
         email: registerData.email,
         password: registerData.password,
+        options: {
+          emailRedirectTo: undefined, // Esto evita el redirect de confirmación
+        },
       })
 
       if (error) throw error
 
       if (data.user) {
-        // Crear perfil de jugador
+        // Crear perfil de jugador inmediatamente
         const { data: playerData, error: playerError } = await supabase
           .from("players")
           .insert([
@@ -99,16 +102,20 @@ export function AuthForm({ onAuthSuccess, onAdminLogin }: AuthFormProps) {
           .select()
           .single()
 
-        if (playerError) throw playerError
+        if (playerError) {
+          console.error("Error creando perfil:", playerError)
+          throw new Error("Error al crear el perfil de jugador")
+        }
 
-        setSuccess("Registro exitoso. Por favor verifica tu email.")
+        setSuccess("¡Registro exitoso! Ingresando al sistema...")
 
-        // Auto login después del registro
+        // Login automático inmediato
         setTimeout(() => {
           onAuthSuccess(playerData)
-        }, 2000)
+        }, 1000)
       }
     } catch (error: any) {
+      console.error("Error completo:", error)
       setError(error.message || "Error al registrarse")
     } finally {
       setLoading(false)
@@ -208,7 +215,9 @@ export function AuthForm({ onAuthSuccess, onAdminLogin }: AuthFormProps) {
                       value={registerData.password}
                       onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
                       required
+                      minLength={6}
                     />
+                    <p className="text-xs text-gray-500">Mínimo 6 caracteres</p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="rankingPosition">Posición en Ranking Actual</Label>
