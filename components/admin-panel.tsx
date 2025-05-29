@@ -22,6 +22,7 @@ import {
   Plus,
   Calendar,
   Award,
+  Trash2,
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
@@ -250,6 +251,41 @@ export function AdminPanel({ currentPlayer, onBack }: AdminPanelProps) {
     }
   }
 
+  const handleDeletePlayer = async (playerId: string, firstName: string, lastName: string) => {
+    const confirmDelete = window.confirm(
+      `¿Estás seguro de que quieres eliminar a ${firstName} ${lastName}? Esta acción no se puede deshacer.`,
+    )
+
+    if (!confirmDelete) return
+
+    try {
+      // Primero eliminar todos los desafíos relacionados
+      const { error: challengesError } = await supabase
+        .from("challenges")
+        .delete()
+        .or(`challenger_id.eq.${playerId},challenged_id.eq.${playerId}`)
+
+      if (challengesError) {
+        console.error("Error deleting challenges:", challengesError)
+        throw new Error("Error al eliminar desafíos del jugador")
+      }
+
+      // Luego eliminar el jugador
+      const { error: playerError } = await supabase.from("players").delete().eq("id", playerId)
+
+      if (playerError) {
+        console.error("Error deleting player:", playerError)
+        throw new Error("Error al eliminar jugador")
+      }
+
+      setMessage(`Jugador ${firstName} ${lastName} eliminado correctamente`)
+      loadAdminData()
+    } catch (error: any) {
+      console.error("Error deleting player:", error)
+      setError(error.message || "Error al eliminar jugador")
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -355,9 +391,18 @@ export function AdminPanel({ currentPlayer, onBack }: AdminPanelProps) {
                           </Button>
                         </div>
                       ) : (
-                        <Button size="sm" variant="outline" onClick={() => handleEditPlayer(player)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button size="sm" variant="outline" onClick={() => handleEditPlayer(player)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleDeletePlayer(player.id, player.first_name, player.last_name)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       )}
                     </div>
                   </div>

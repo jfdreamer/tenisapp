@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, Trophy, Users } from "lucide-react"
+import { ArrowLeft, Trophy, Users, Clock } from "lucide-react"
 import type { Player } from "@/types/tennis"
 import { supabase } from "@/lib/supabase"
 
@@ -67,12 +67,16 @@ export function ChallengeSystem({ currentPlayer, onBack }: ChallengeSystemProps)
       }
 
       if (!challengeDate) {
-        throw new Error("Debes seleccionar una fecha")
+        throw new Error("Debes seleccionar una fecha propuesta")
       }
 
       if (!challengeTime) {
-        throw new Error("Debes seleccionar un horario")
+        throw new Error("Debes seleccionar un horario propuesto")
       }
+
+      // Calcular fecha límite (7 días desde hoy)
+      const limitDate = new Date()
+      limitDate.setDate(limitDate.getDate() + 7)
 
       const { error: insertError } = await supabase.from("challenges").insert([
         {
@@ -81,6 +85,7 @@ export function ChallengeSystem({ currentPlayer, onBack }: ChallengeSystemProps)
           challenge_date: challengeDate,
           challenge_time: challengeTime,
           status: "pending",
+          expires_at: limitDate.toISOString(),
         },
       ])
 
@@ -89,7 +94,7 @@ export function ChallengeSystem({ currentPlayer, onBack }: ChallengeSystemProps)
         throw new Error(`Error al crear desafío: ${insertError.message}`)
       }
 
-      setMessage("¡Desafío enviado exitosamente!")
+      setMessage("¡Desafío enviado exitosamente! El oponente tiene 7 días para coordinar el partido.")
       setSelectedPlayer("")
       setChallengeDate("")
       setChallengeTime("")
@@ -125,9 +130,10 @@ export function ChallengeSystem({ currentPlayer, onBack }: ChallengeSystemProps)
         </CardHeader>
         <CardContent className="space-y-2">
           <p className="text-sm">• Solo puedes desafiar hasta 5 puestos hacia arriba en el ranking</p>
+          <p className="text-sm">• Propón una fecha y horario para el partido</p>
+          <p className="text-sm">• Tienen 7 días desde hoy para coordinar y jugar el partido</p>
+          <p className="text-sm">• Si no se juega en 7 días, el admin decidirá el resultado</p>
           <p className="text-sm">• El ganador se queda con la posición más alta</p>
-          <p className="text-sm">• Si el desafiado no acepta, intercambian posiciones</p>
-          <p className="text-sm">• Si el desafiado no llega a jugar, pierde 2 posiciones</p>
         </CardContent>
       </Card>
 
@@ -162,7 +168,7 @@ export function ChallengeSystem({ currentPlayer, onBack }: ChallengeSystemProps)
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="date">Fecha del Partido</Label>
+                <Label htmlFor="date">Fecha Propuesta</Label>
                 <Input
                   id="date"
                   type="date"
@@ -171,10 +177,13 @@ export function ChallengeSystem({ currentPlayer, onBack }: ChallengeSystemProps)
                   min={new Date().toISOString().split("T")[0]}
                   required
                 />
+                <p className="text-xs text-gray-500">
+                  Esta es una fecha propuesta. Pueden coordinar otra fecha dentro de los 7 días.
+                </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="time">Horario</Label>
+                <Label htmlFor="time">Horario Propuesto</Label>
                 <Select value={challengeTime} onValueChange={setChallengeTime} required>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecciona un horario" />
@@ -184,6 +193,7 @@ export function ChallengeSystem({ currentPlayer, onBack }: ChallengeSystemProps)
                     <SelectItem value="09:00">09:00</SelectItem>
                     <SelectItem value="10:00">10:00</SelectItem>
                     <SelectItem value="11:00">11:00</SelectItem>
+                    <SelectItem value="12:00">12:00</SelectItem>
                     <SelectItem value="14:00">14:00</SelectItem>
                     <SelectItem value="15:00">15:00</SelectItem>
                     <SelectItem value="16:00">16:00</SelectItem>
@@ -191,9 +201,21 @@ export function ChallengeSystem({ currentPlayer, onBack }: ChallengeSystemProps)
                     <SelectItem value="18:00">18:00</SelectItem>
                     <SelectItem value="19:00">19:00</SelectItem>
                     <SelectItem value="20:00">20:00</SelectItem>
+                    <SelectItem value="21:00">21:00</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-gray-500">
+                  Este es un horario propuesto. Pueden coordinar otro horario entre ustedes.
+                </p>
               </div>
+
+              <Alert className="border-blue-200 bg-blue-50">
+                <Clock className="h-4 w-4" />
+                <AlertDescription className="text-blue-800">
+                  <strong>Importante:</strong> Una vez enviado el desafío, tendrán exactamente 7 días para coordinar y
+                  jugar el partido. Después de ese tiempo, el administrador decidirá el resultado.
+                </AlertDescription>
+              </Alert>
 
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? "Enviando Desafío..." : "Enviar Desafío"}
