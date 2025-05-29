@@ -11,39 +11,16 @@ import { ChallengeManagement } from "@/components/challenge-management"
 import { ProfileEditor } from "@/components/profile-editor"
 import { Regulations } from "@/components/regulations"
 import { AdminPanel } from "@/components/admin-panel"
-import { supabase } from "@/lib/supabase"
 
 export default function TennisClubApp() {
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null)
   const [currentSection, setCurrentSection] = useState("dashboard")
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
-    checkUser()
     checkAdminStatus()
   }, [])
-
-  const checkUser = async () => {
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      if (session?.user) {
-        // Usuario logueado, obtener datos del jugador
-        const { data: playerData } = await supabase.from("players").select("*").eq("email", session.user.email).single()
-
-        if (playerData) {
-          setCurrentPlayer(playerData)
-        }
-      }
-    } catch (error) {
-      console.error("Error checking user:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const checkAdminStatus = () => {
     const adminStatus = localStorage.getItem("isAdmin")
@@ -69,7 +46,6 @@ export default function TennisClubApp() {
   }
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut()
     localStorage.removeItem("isAdmin")
     setCurrentPlayer(null)
     setIsAdmin(false)

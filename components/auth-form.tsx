@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Crown } from "lucide-react"
+import { Crown, Search } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import type { Player } from "@/types/tennis"
 import { AdminLogin } from "./admin-login"
@@ -23,54 +23,63 @@ export function AuthForm({ onAuthSuccess, onAdminLogin }: AuthFormProps) {
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [showAdminLogin, setShowAdminLogin] = useState(false)
+  const [searchResults, setSearchResults] = useState<Player[]>([])
 
   const [loginData, setLoginData] = useState({
-    email: "",
-    password: "",
+    firstName: "",
+    lastName: "",
   })
 
   const [registerData, setRegisterData] = useState({
-    email: "",
-    password: "",
     firstName: "",
     lastName: "",
     rankingPosition: "",
   })
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSearch = async () => {
+    if (!loginData.firstName.trim() && !loginData.lastName.trim()) {
+      setError("Ingresa al menos el nombre o apellido")
+      return
+    }
+
     setLoading(true)
     setError("")
+    setSearchResults([])
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: loginData.email,
-        password: loginData.password,
-      })
+      let query = supabase.from("players").select("*").neq("is_admin", true)
+
+      // Buscar por nombre y/o apellido (case insensitive)
+      if (loginData.firstName.trim() && loginData.lastName.trim()) {
+        query = query
+          .ilike("first_name", `%${loginData.firstName.trim()}%`)
+          .ilike("last_name", `%${loginData.lastName.trim()}%`)
+      } else if (loginData.firstName.trim()) {
+        query = query.ilike("first_name", `%${loginData.firstName.trim()}%`)
+      } else if (loginData.lastName.trim()) {
+        query = query.ilike("last_name", `%${loginData.lastName.trim()}%`)
+      }
+
+      const { data, error } = await query.order("ranking_position", { ascending: true })
 
       if (error) throw error
 
-      if (data.user) {
-        // Obtener datos del jugador
-        const { data: playerData, error: playerError } = await supabase
-          .from("players")
-          .select("*")
-          .eq("email", data.user.email)
-          .single()
-
-        if (playerError) {
-          console.error("Error obteniendo jugador:", playerError)
-          throw new Error("No se encontró el perfil del jugador")
-        }
-
-        onAuthSuccess(playerData)
+      if (!data || data.length === 0) {
+        setError("No se encontró ningún jugador con ese nombre")
+        return
       }
+
+      setSearchResults(data)
     } catch (error: any) {
-      console.error("Error en login:", error)
-      setError(error.message || "Error al iniciar sesión")
+      console.error("Error searching player:", error)
+      setError(error.message || "Error al buscar jugador")
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleSelectPlayer = (player: Player) => {
+    onAuthSuccess(player)
   }
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -81,18 +90,8 @@ export function AuthForm({ onAuthSuccess, onAdminLogin }: AuthFormProps) {
 
     try {
       // Validar datos antes de enviar
-      if (
-        !registerData.email ||
-        !registerData.password ||
-        !registerData.firstName ||
-        !registerData.lastName ||
-        !registerData.rankingPosition
-      ) {
+      if (!registerData.firstName || !registerData.lastName || !registerData.rankingPosition) {
         throw new Error("Todos los campos son obligatorios")
-      }
-
-      if (registerData.password.length < 6) {
-        throw new Error("La contraseña debe tener al menos 6 caracteres")
       }
 
       const rankingPos = Number.parseInt(registerData.rankingPosition)
@@ -100,29 +99,23 @@ export function AuthForm({ onAuthSuccess, onAdminLogin }: AuthFormProps) {
         throw new Error("La posición del ranking debe ser un número entre 1 y 200")
       }
 
-      // Registrar usuario en Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: registerData.email,
-        password: registerData.password,
-        options: {
-          emailRedirectTo: undefined,
-        },
-      })
+      // Verificar si ya existe un jugador con el mismo nombre
+      const { data: existingPlayer } = await supabase
+        .from("players")
+        .select("*")
+        .ilike("first_name", registerData.firstName.trim())
+        .ilike("last_name", registerData.lastName.trim())
+        .single()
 
-      if (authError) {
-        console.error("Error en auth:", authError)
-        throw authError
+      if (existingPlayer) {
+        throw new Error("Ya existe un jugador con ese nombre y apellido")
       }
 
-      if (!authData.user) {
-        throw new Error("No se pudo crear el usuario")
-      }
-
-      // Crear perfil de jugador
+      // Crear perfil de jugador directamente
       const playerData = {
-        email: registerData.email,
-        first_name: registerData.firstName,
-        last_name: registerData.lastName,
+        email: `${registerData.firstName.toLowerCase()}.${registerData.lastName.toLowerCase()}@btc.local`,
+        first_name: registerData.firstName.trim(),
+        last_name: registerData.lastName.trim(),
         ranking_position: rankingPos,
         is_admin: false,
       }
@@ -137,8 +130,6 @@ export function AuthForm({ onAuthSuccess, onAdminLogin }: AuthFormProps) {
 
       if (playerError) {
         console.error("Error creando perfil:", playerError)
-        // Si falla la creación del perfil, eliminar el usuario de auth
-        await supabase.auth.admin.deleteUser(authData.user.id)
         throw new Error(`Error al crear el perfil: ${playerError.message}`)
       }
 
@@ -176,86 +167,87 @@ export function AuthForm({ onAuthSuccess, onAdminLogin }: AuthFormProps) {
         <Card>
           <CardHeader>
             <CardTitle>Acceso al Sistema</CardTitle>
-            <CardDescription>Inicia sesión o regístrate para participar en los desafíos</CardDescription>
+            <CardDescription>Busca tu nombre o regístrate para participar en los desafíos</CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="login" className="w-full">
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="login">Iniciar Sesión</TabsTrigger>
+                <TabsTrigger value="login">Buscar mi Nombre</TabsTrigger>
                 <TabsTrigger value="register">Registrarse</TabsTrigger>
               </TabsList>
 
               <TabsContent value="login" className="space-y-4">
-                <form onSubmit={handleLogin} className="space-y-4">
+                <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
+                    <Label htmlFor="firstName">Nombre</Label>
                     <Input
-                      id="email"
-                      type="email"
-                      value={loginData.email}
-                      onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
-                      required
+                      id="firstName"
+                      value={loginData.firstName}
+                      onChange={(e) => setLoginData({ ...loginData, firstName: e.target.value })}
+                      placeholder="Tu nombre"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="password">Contraseña</Label>
+                    <Label htmlFor="lastName">Apellido</Label>
                     <Input
-                      id="password"
-                      type="password"
-                      value={loginData.password}
-                      onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
-                      required
+                      id="lastName"
+                      value={loginData.lastName}
+                      onChange={(e) => setLoginData({ ...loginData, lastName: e.target.value })}
+                      placeholder="Tu apellido"
                     />
                   </div>
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? "Iniciando sesión..." : "Iniciar Sesión"}
+                  <Button onClick={handleSearch} className="w-full" disabled={loading}>
+                    <Search className="h-4 w-4 mr-2" />
+                    {loading ? "Buscando..." : "Buscar mi Nombre"}
                   </Button>
-                </form>
+                </div>
+
+                {/* Resultados de búsqueda */}
+                {searchResults.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Selecciona tu perfil:</Label>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {searchResults.map((player) => (
+                        <Button
+                          key={player.id}
+                          variant="outline"
+                          className="w-full justify-between h-auto p-3"
+                          onClick={() => handleSelectPlayer(player)}
+                        >
+                          <div className="text-left">
+                            <p className="font-medium">
+                              {player.first_name} {player.last_name}
+                            </p>
+                            <p className="text-sm text-gray-600">Ranking #{player.ranking_position}</p>
+                          </div>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="register" className="space-y-4">
                 <form onSubmit={handleRegister} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="firstName">Nombre</Label>
+                      <Label htmlFor="registerFirstName">Nombre</Label>
                       <Input
-                        id="firstName"
+                        id="registerFirstName"
                         value={registerData.firstName}
                         onChange={(e) => setRegisterData({ ...registerData, firstName: e.target.value })}
                         required
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="lastName">Apellido</Label>
+                      <Label htmlFor="registerLastName">Apellido</Label>
                       <Input
-                        id="lastName"
+                        id="registerLastName"
                         value={registerData.lastName}
                         onChange={(e) => setRegisterData({ ...registerData, lastName: e.target.value })}
                         required
                       />
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="registerEmail">Email</Label>
-                    <Input
-                      id="registerEmail"
-                      type="email"
-                      value={registerData.email}
-                      onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="registerPassword">Contraseña</Label>
-                    <Input
-                      id="registerPassword"
-                      type="password"
-                      value={registerData.password}
-                      onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
-                      required
-                      minLength={6}
-                    />
-                    <p className="text-xs text-gray-500">Mínimo 6 caracteres</p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="rankingPosition">Posición en Ranking Actual</Label>
