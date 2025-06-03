@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Trophy, Users, Calendar, Clock, Star, Target, User } from "lucide-react"
+import { Trophy, Users, Calendar, Clock, Star, Target, User, TrendingUp } from "lucide-react"
 import type { Player } from "@/types/tennis"
 import { supabase } from "@/lib/supabase"
 
@@ -19,6 +19,7 @@ export function Dashboard({ currentPlayer, onNavigate }: DashboardProps) {
     completedMatches: 0,
   })
   const [topPlayers, setTopPlayers] = useState<Player[]>([])
+  const [allPlayers, setAllPlayers] = useState<Player[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -27,8 +28,13 @@ export function Dashboard({ currentPlayer, onNavigate }: DashboardProps) {
 
   const loadDashboardData = async () => {
     try {
-      // Cargar estadísticas (excluir admin del conteo)
-      const { data: players } = await supabase.from("players").select("*").neq("is_admin", true)
+      // Cargar todos los jugadores (excluir admin del conteo)
+      const { data: players } = await supabase
+        .from("players")
+        .select("*")
+        .neq("is_admin", true)
+        .gt("ranking_position", 0)
+        .order("ranking_position", { ascending: true })
 
       const { data: challenges } = await supabase
         .from("challenges")
@@ -44,16 +50,11 @@ export function Dashboard({ currentPlayer, onNavigate }: DashboardProps) {
         completedMatches,
       })
 
-      // Cargar top 10 jugadores (excluir admin y ordenar por ranking)
-      const { data: topPlayersData } = await supabase
-        .from("players")
-        .select("*")
-        .neq("is_admin", true)
-        .gt("ranking_position", 0)
-        .order("ranking_position", { ascending: true })
-        .limit(10)
+      // Guardar todos los jugadores para el ranking completo
+      setAllPlayers(players || [])
 
-      setTopPlayers(topPlayersData || [])
+      // Cargar top 10 jugadores para la vista resumida
+      setTopPlayers(players?.slice(0, 10) || [])
     } catch (error) {
       console.error("Error loading dashboard data:", error)
     } finally {
@@ -78,6 +79,7 @@ export function Dashboard({ currentPlayer, onNavigate }: DashboardProps) {
         {currentPlayer.ranking_position > 0 && (
           <p className="text-gray-600">
             Tu posición actual: <span className="font-semibold text-blue-600">#{currentPlayer.ranking_position}</span>
+            <span className="text-gray-500 ml-2">de {stats.totalPlayers} jugadores</span>
           </p>
         )}
       </div>
@@ -101,7 +103,7 @@ export function Dashboard({ currentPlayer, onNavigate }: DashboardProps) {
             <Users className="h-8 w-8 text-blue-500" />
             <div className="ml-4">
               <p className="text-2xl font-bold">{stats.totalPlayers}</p>
-              <p className="text-gray-600 text-sm">Jugadores</p>
+              <p className="text-gray-600 text-sm">Total Jugadores</p>
             </div>
           </CardContent>
         </Card>
@@ -140,7 +142,7 @@ export function Dashboard({ currentPlayer, onNavigate }: DashboardProps) {
             </Button>
             <Button onClick={() => onNavigate("profile")} variant="outline" className="w-full justify-start" size="lg">
               <User className="h-4 w-4 mr-2" />
-              Mi Perfil y Disponibilidad
+              Mi Perfil
             </Button>
             <Button onClick={() => onNavigate("manage")} variant="outline" className="w-full justify-start" size="lg">
               <Target className="h-4 w-4 mr-2" />
@@ -150,25 +152,29 @@ export function Dashboard({ currentPlayer, onNavigate }: DashboardProps) {
         </Card>
       )}
 
-      {/* Ranking BTC */}
+      {/* Ranking BTC Completo */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Trophy className="h-5 w-5" />
-            Ranking BTC
+            Ranking Completo BTC
           </CardTitle>
-          <p className="text-sm text-gray-600">Los mejores jugadores del Belgrano Tennis Challenge</p>
+          <p className="text-sm text-gray-600">
+            Todos los jugadores del Belgrano Tennis Challenge ({stats.totalPlayers} jugadores)
+          </p>
         </CardHeader>
         <CardContent>
-          {topPlayers.length === 0 ? (
+          {allPlayers.length === 0 ? (
             <p className="text-center text-gray-500 py-8">No hay jugadores registrados aún</p>
           ) : (
-            <div className="space-y-3">
-              {topPlayers.map((player, index) => (
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {allPlayers.map((player, index) => (
                 <div
                   key={player.id}
-                  className={`flex items-center justify-between p-3 rounded-lg ${
-                    player.id === currentPlayer.id ? "bg-blue-50 border border-blue-200" : "bg-gray-50"
+                  className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
+                    player.id === currentPlayer.id
+                      ? "bg-blue-50 border-2 border-blue-200"
+                      : "bg-gray-50 hover:bg-gray-100"
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -180,7 +186,9 @@ export function Dashboard({ currentPlayer, onNavigate }: DashboardProps) {
                             ? "bg-gray-400 text-white"
                             : index === 2
                               ? "bg-amber-600 text-white"
-                              : "bg-gray-200 text-gray-700"
+                              : player.id === currentPlayer.id
+                                ? "bg-blue-500 text-white"
+                                : "bg-gray-200 text-gray-700"
                       }`}
                     >
                       {player.ranking_position}
@@ -188,9 +196,25 @@ export function Dashboard({ currentPlayer, onNavigate }: DashboardProps) {
                     <div>
                       <p className="font-medium">
                         {player.first_name} {player.last_name}
-                        {player.id === currentPlayer.id && <span className="text-blue-600 ml-2">(Tú)</span>}
+                        {player.id === currentPlayer.id && (
+                          <span className="text-blue-600 ml-2 font-semibold">(Tú)</span>
+                        )}
                       </p>
                     </div>
+                  </div>
+
+                  {/* Indicadores especiales */}
+                  <div className="flex items-center gap-2">
+                    {index < 3 && (
+                      <div className="flex items-center gap-1">
+                        <Trophy
+                          className={`h-4 w-4 ${
+                            index === 0 ? "text-yellow-500" : index === 1 ? "text-gray-400" : "text-amber-600"
+                          }`}
+                        />
+                      </div>
+                    )}
+                    {player.id === currentPlayer.id && <TrendingUp className="h-4 w-4 text-blue-500" />}
                   </div>
                 </div>
               ))}
