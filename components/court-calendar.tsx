@@ -171,7 +171,7 @@ export function CourtCalendar({ court, pricing, onBack }: CourtCalendarProps) {
         return
       }
 
-      const playerCount = reservationForm.gameType === "singles" ? 1 : 4
+      const playerCount = reservationForm.gameType === "singles" ? 2 : 4
       const validPlayers = reservationForm.playerNames.slice(0, playerCount).filter((name) => name.trim())
 
       if (validPlayers.length !== playerCount) {
@@ -180,7 +180,7 @@ export function CourtCalendar({ court, pricing, onBack }: CourtCalendarProps) {
       }
 
       const [startTime, endTime] = selectedSlot.split("-")
-      const pricePerPlayer = reservationForm.gameType === "singles" ? pricing.singles_price : pricing.doubles_price
+      const pricePerPlayer = reservationForm.gameType === "singles" ? pricing.singles_price * 2 : pricing.doubles_price
       const totalCost = pricePerPlayer * playerCount
 
       const reservationData = {
@@ -351,8 +351,8 @@ export function CourtCalendar({ court, pricing, onBack }: CourtCalendarProps) {
               <CardContent>
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span>Singles (1 jugador):</span>
-                    <span className="font-bold">${pricing.singles_price.toLocaleString()}</span>
+                    <span>Singles (2 jugadores):</span>
+                    <span className="font-bold">${(pricing.singles_price * 2).toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Dobles (4 jugadores):</span>
@@ -407,7 +407,7 @@ export function CourtCalendar({ court, pricing, onBack }: CourtCalendarProps) {
                       <SelectValue placeholder="Selecciona tipo de juego" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="singles">Singles (1 jugador)</SelectItem>
+                      <SelectItem value="singles">Singles (2 jugadores)</SelectItem>
                       <SelectItem value="doubles">Dobles (4 jugadores)</SelectItem>
                     </SelectContent>
                   </Select>
@@ -417,7 +417,7 @@ export function CourtCalendar({ court, pricing, onBack }: CourtCalendarProps) {
                   <>
                     <div>
                       <Label>Apellidos de Jugadores</Label>
-                      {(reservationForm.gameType === "singles" ? [0] : [0, 1, 2, 3]).map((index) => (
+                      {(reservationForm.gameType === "singles" ? [0, 1] : [0, 1, 2, 3]).map((index) => (
                         <Input
                           key={index}
                           placeholder={`Apellido jugador ${index + 1}`}
@@ -448,7 +448,7 @@ export function CourtCalendar({ court, pricing, onBack }: CourtCalendarProps) {
                         <span className="text-xl font-bold text-green-600">
                           $
                           {(reservationForm.gameType === "singles"
-                            ? pricing.singles_price
+                            ? pricing.singles_price * 2
                             : pricing.doubles_price * 4
                           ).toLocaleString()}
                         </span>
