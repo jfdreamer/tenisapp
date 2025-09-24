@@ -65,8 +65,13 @@ export function AdminPanel({ onBack, courts, pricing, onPricingUpdate }: AdminPa
   const loadReservations = async () => {
     try {
       setLoading(true)
-      const startDate = `${selectedMonth}-01`
-      const endDate = `${selectedMonth}-31`
+
+      // Calcular el primer y último día del mes correctamente
+      const year = Number.parseInt(selectedMonth.split("-")[0])
+      const month = Number.parseInt(selectedMonth.split("-")[1])
+
+      const startDate = new Date(year, month - 1, 1).toISOString().split("T")[0]
+      const endDate = new Date(year, month, 0).toISOString().split("T")[0] // Último día del mes
 
       const { data, error } = await supabase
         .from("reservations")
@@ -113,7 +118,7 @@ export function AdminPanel({ onBack, courts, pricing, onPricingUpdate }: AdminPa
         .update({
           singles_price: newPricing.singles_price,
           doubles_price: newPricing.doubles_price,
-          admin_email: newPricing.admin_email,
+          admin_email: newPricing.admin_email || "admin@belgranotennis.com",
           updated_at: new Date().toISOString(),
         })
         .eq("id", 1)

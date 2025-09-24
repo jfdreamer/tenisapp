@@ -67,18 +67,22 @@ export function CourtCalendar({ court, pricing, onBack }: CourtCalendarProps) {
     const startHour = 7
     const endHour = court.has_lights ? 22 : 20
 
-    for (let hour = startHour; hour < endHour; hour += 1.5) {
-      const wholeHour = Math.floor(hour)
-      const minutes = (hour % 1) * 60
-      const startTime = `${wholeHour.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`
+    // Generar slots cada 30 minutos
+    for (let hour = startHour; hour < endHour; hour++) {
+      for (let minutes = 0; minutes < 60; minutes += 30) {
+        const currentTime = hour + minutes / 60
+        const endTime = currentTime + 1.5 // 1.5 horas de duración
 
-      const endHourCalc = hour + 1.5
-      const endWholeHour = Math.floor(endHourCalc)
-      const endMinutes = (endHourCalc % 1) * 60
-      const endTime = `${endWholeHour.toString().padStart(2, "0")}:${endMinutes.toString().padStart(2, "0")}`
+        // Verificar que el turno termine antes del horario límite
+        if (endTime <= (court.has_lights ? 22 : 20)) {
+          const startTimeStr = `${hour.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`
 
-      if (endHourCalc <= (court.has_lights ? 22 : 20)) {
-        slots.push(`${startTime}-${endTime}`)
+          const endHourCalc = Math.floor(endTime)
+          const endMinutesCalc = (endTime % 1) * 60
+          const endTimeStr = `${endHourCalc.toString().padStart(2, "0")}:${endMinutesCalc.toString().padStart(2, "0")}`
+
+          slots.push(`${startTimeStr}-${endTimeStr}`)
+        }
       }
     }
 
@@ -106,18 +110,13 @@ export function CourtCalendar({ court, pricing, onBack }: CourtCalendarProps) {
 
   const generateAvailableSlots = () => {
     const allSlots = generateTimeSlots()
-    const occupiedSlots = reservations.map((r) => `${r.start_time}-${r.end_time}`)
 
     const available = allSlots.filter((slot) => {
       const [startTime] = slot.split("-")
-
-      // Verificar si el slot está ocupado
-      if (occupiedSlots.includes(slot)) return false
-
-      // Verificar solapamientos con reservas existentes
       const slotStart = timeToMinutes(startTime)
-      const slotEnd = slotStart + 90 // 1.5 horas
+      const slotEnd = slotStart + 90 // 1.5 horas en minutos
 
+      // Verificar conflictos con reservas existentes
       for (const reservation of reservations) {
         const reservationStart = timeToMinutes(reservation.start_time)
         const reservationEnd = timeToMinutes(reservation.end_time)
@@ -228,6 +227,14 @@ export function CourtCalendar({ court, pricing, onBack }: CourtCalendarProps) {
     })
   }
 
+  const isSlotOccupied = (slot: string) => {
+    return reservations.some((r) => `${r.start_time}-${r.end_time}` === slot)
+  }
+
+  const getReservationForSlot = (slot: string) => {
+    return reservations.find((r) => `${r.start_time}-${r.end_time}` === slot)
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50">
       <header className="bg-white shadow-sm border-b">
@@ -241,7 +248,7 @@ export function CourtCalendar({ court, pricing, onBack }: CourtCalendarProps) {
               <h1 className="text-xl font-bold text-gray-900">{court.name}</h1>
               <p className="text-sm text-gray-600">
                 {court.has_lights ? "Con iluminación" : "Sin iluminación"} • Horarios: 7:00 -{" "}
-                {court.has_lights ? "22:00" : "20:00"}
+                {court.has_lights ? "22:00" : "20:00"} • Turnos cada 30 min
               </p>
             </div>
           </div>
@@ -269,7 +276,7 @@ export function CourtCalendar({ court, pricing, onBack }: CourtCalendarProps) {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Clock className="h-5 w-5" />
-                  Disponibilidad
+                  Disponibilidad - Turnos cada 30 minutos
                 </CardTitle>
                 <div className="flex items-center gap-4">
                   <Label htmlFor="date">Fecha:</Label>
@@ -294,8 +301,8 @@ export function CourtCalendar({ court, pricing, onBack }: CourtCalendarProps) {
                     <div className="grid grid-cols-2 gap-2">
                       {generateTimeSlots().map((slot) => {
                         const isAvailable = availableSlots.includes(slot)
-                        const isOccupied = reservations.some((r) => `${r.start_time}-${r.end_time}` === slot)
-                        const reservation = reservations.find((r) => `${r.start_time}-${r.end_time}` === slot)
+                        const isOccupied = isSlotOccupied(slot)
+                        const reservation = getReservationForSlot(slot)
 
                         return (
                           <div key={slot} className="relative">
@@ -365,7 +372,10 @@ export function CourtCalendar({ court, pricing, onBack }: CourtCalendarProps) {
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2 text-sm">
-                  <li>• Turnos de 1 hora y 30 minutos</li>
+                  <li>
+                    • <strong>Turnos cada 30 minutos</strong>
+                  </li>
+                  <li>• Duración: 1 hora y 30 minutos</li>
                   <li>• Reserva inmediata y confirmada</li>
                   <li>• Pago en efectivo al llegar</li>
                   <li>• Llega 10 minutos antes</li>
