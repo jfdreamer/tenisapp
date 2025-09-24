@@ -26,9 +26,7 @@ export function AdminLogin({ onAdminLogin, onBack }: AdminLoginProps) {
     setError("")
 
     // Credenciales fijas para admin
-    if (credentials.username === "admin" && credentials.password === "123456") {
-      // Guardar en localStorage que es admin
-      localStorage.setItem("isAdmin", "true")
+    if (credentials.username === "admin" && credentials.password === "belgrano2024") {
       onAdminLogin()
     } else {
       setError("Usuario o contraseña incorrectos")
@@ -38,13 +36,13 @@ export function AdminLogin({ onAdminLogin, onBack }: AdminLoginProps) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-blue-50 py-12 px-4">
       <div className="max-w-md w-full space-y-8">
         <Card>
           <CardHeader className="text-center">
             <Crown className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
-            <CardTitle className="text-2xl">Acceso de Administrador</CardTitle>
-            <p className="text-gray-600">Panel de gestión del Belgrano Tennis Challenge</p>
+            <CardTitle className="text-2xl">Panel de Administración</CardTitle>
+            <p className="text-gray-600">Club Belgrano Tennis</p>
           </CardHeader>
           <CardContent className="space-y-4">
             <form onSubmit={handleLogin} className="space-y-4">
@@ -71,7 +69,7 @@ export function AdminLogin({ onAdminLogin, onBack }: AdminLoginProps) {
                 />
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Verificando..." : "Ingresar como Admin"}
+                {loading ? "Verificando..." : "Ingresar"}
               </Button>
             </form>
 
@@ -81,9 +79,9 @@ export function AdminLogin({ onAdminLogin, onBack }: AdminLoginProps) {
               </Alert>
             )}
 
-            <Button variant="outline" onClick={onBack} className="w-full">
+            <Button variant="outline" onClick={onBack} className="w-full bg-transparent">
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Volver al Login Normal
+              Volver
             </Button>
           </CardContent>
         </Card>

@@ -8,827 +8,481 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  ArrowLeft,
-  Users,
-  Trophy,
-  Settings,
-  Edit,
-  Save,
-  X,
-  Crown,
-  CheckCircle,
-  XCircle,
-  Plus,
-  Calendar,
-  Award,
-  Trash2,
-} from "lucide-react"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import type { Player, Challenge } from "@/types/tennis"
+import { ArrowLeft, Calendar, DollarSign, BarChart3, Settings, Trash2, Edit, Save, X, Mail } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 
-interface AdminPanelProps {
-  currentPlayer: Player
-  onBack: () => void
+interface Court {
+  id: number
+  name: string
+  has_lights: boolean
+  is_active: boolean
 }
 
-export function AdminPanel({ currentPlayer, onBack }: AdminPanelProps) {
-  const [players, setPlayers] = useState<Player[]>([])
-  const [challenges, setChallenges] = useState<Challenge[]>([])
-  const [loading, setLoading] = useState(true)
-  const [editingPlayer, setEditingPlayer] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState({ ranking_position: 0 })
+interface Pricing {
+  singles_price: number
+  doubles_price: number
+  admin_email?: string
+}
+
+interface Reservation {
+  id: string
+  court_id: number
+  reservation_date: string
+  start_time: string
+  end_time: string
+  game_type: string
+  player_names: string[]
+  total_cost: number
+  contact_info: string
+  created_at: string
+  court?: { name: string }
+}
+
+interface AdminPanelProps {
+  onBack: () => void
+  courts: Court[]
+  pricing: Pricing
+  onPricingUpdate: (pricing: Pricing) => void
+}
+
+export function AdminPanel({ onBack, courts, pricing, onPricingUpdate }: AdminPanelProps) {
+  const [reservations, setReservations] = useState<Reservation[]>([])
+  const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
-
-  // Estados para crear desafío
-  const [showCreateChallenge, setShowCreateChallenge] = useState(false)
-  const [newChallenge, setNewChallenge] = useState({
-    challenger_id: "",
-    challenged_id: "",
-    challenge_date: "",
-    challenge_time: "",
-  })
-
-  // Estados para reportar resultado
-  const [showReportResult, setShowReportResult] = useState(false)
-  const [selectedChallenge, setSelectedChallenge] = useState<Challenge | null>(null)
-  const [resultForm, setResultForm] = useState({
-    winner_id: "",
-    score: "",
-  })
+  const [editingPrices, setEditingPrices] = useState(false)
+  const [newPricing, setNewPricing] = useState(pricing)
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7))
 
   useEffect(() => {
-    loadAdminData()
-  }, [])
+    loadReservations()
+  }, [selectedMonth])
 
-  const loadAdminData = async () => {
+  useEffect(() => {
+    setNewPricing(pricing)
+  }, [pricing])
+
+  const loadReservations = async () => {
     try {
       setLoading(true)
-      // Cargar todos los jugadores
-      const { data: playersData } = await supabase
-        .from("players")
-        .select("*")
-        .order("ranking_position", { ascending: true })
+      const startDate = `${selectedMonth}-01`
+      const endDate = `${selectedMonth}-31`
 
-      // Cargar todos los desafíos
-      const { data: challengesData } = await supabase
-        .from("challenges")
+      const { data, error } = await supabase
+        .from("reservations")
         .select(`
           *,
-          challenger:challenger_id(first_name, last_name, ranking_position),
-          challenged:challenged_id(first_name, last_name, ranking_position),
-          winner:winner_id(first_name, last_name)
+          court:courts(name)
         `)
-        .order("created_at", { ascending: false })
+        .gte("reservation_date", startDate)
+        .lte("reservation_date", endDate)
+        .order("reservation_date", { ascending: false })
+        .order("start_time", { ascending: true })
 
-      setPlayers(playersData || [])
-      setChallenges(challengesData || [])
+      if (error) throw error
+      setReservations(data || [])
     } catch (error) {
-      console.error("Error loading admin data:", error)
-      setMessage("Error al cargar datos de administración")
+      console.error("Error loading reservations:", error)
+      setError("Error al cargar reservas")
     } finally {
       setLoading(false)
     }
   }
 
-  const handleEditPlayer = (player: Player) => {
-    setEditingPlayer(player.id)
-    setEditForm({
-      ranking_position: player.ranking_position,
-    })
+  const handleDeleteReservation = async (reservationId: string) => {
+    if (!confirm("¿Estás seguro de que quieres eliminar esta reserva?")) return
+
+    try {
+      const { error } = await supabase.from("reservations").delete().eq("id", reservationId)
+
+      if (error) throw error
+
+      setMessage("Reserva eliminada correctamente")
+      loadReservations()
+    } catch (error: any) {
+      console.error("Error deleting reservation:", error)
+      setError(error.message || "Error al eliminar reserva")
+    }
   }
 
-  const handleSavePlayer = async (playerId: string) => {
+  const handleUpdatePricing = async () => {
     try {
+      setLoading(true)
       const { error } = await supabase
-        .from("players")
+        .from("pricing")
         .update({
-          ranking_position: editForm.ranking_position,
+          singles_price: newPricing.singles_price,
+          doubles_price: newPricing.doubles_price,
+          admin_email: newPricing.admin_email,
+          updated_at: new Date().toISOString(),
         })
-        .eq("id", playerId)
+        .eq("id", 1)
 
       if (error) throw error
 
-      setMessage("Jugador actualizado correctamente")
-      setEditingPlayer(null)
-      loadAdminData()
+      onPricingUpdate(newPricing)
+      setEditingPrices(false)
+      setMessage("Configuración actualizada correctamente")
     } catch (error: any) {
-      console.error("Error updating player:", error)
-      setError(error.message || "Error al actualizar jugador")
+      console.error("Error updating pricing:", error)
+      setError(error.message || "Error al actualizar configuración")
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleChallengeAction = async (challengeId: string, action: string) => {
-    try {
-      const updateData: any = {}
-
-      if (action === "approve") {
-        updateData.status = "accepted"
-      } else if (action === "cancel") {
-        updateData.status = "cancelled"
-      }
-
-      const { error } = await supabase.from("challenges").update(updateData).eq("id", challengeId)
-
-      if (error) throw error
-
-      setMessage(`Desafío ${action === "approve" ? "aprobado" : "cancelado"} correctamente`)
-      loadAdminData()
-    } catch (error: any) {
-      console.error("Error updating challenge:", error)
-      setError(error.message || "Error al actualizar desafío")
+  const getMonthlyStats = () => {
+    const stats = {
+      totalReservations: reservations.length,
+      totalRevenue: reservations.reduce((sum, r) => sum + r.total_cost, 0),
+      singlesCount: reservations.filter((r) => r.game_type === "singles").length,
+      doublesCount: reservations.filter((r) => r.game_type === "doubles").length,
+      courtUsage: {} as Record<string, number>,
     }
-  }
 
-  // Función para crear un nuevo desafío
-  const handleCreateChallenge = async () => {
-    try {
-      if (
-        !newChallenge.challenger_id ||
-        !newChallenge.challenged_id ||
-        !newChallenge.challenge_date ||
-        !newChallenge.challenge_time
-      ) {
-        setError("Todos los campos son obligatorios")
-        return
-      }
-
-      const { error } = await supabase.from("challenges").insert([
-        {
-          challenger_id: newChallenge.challenger_id,
-          challenged_id: newChallenge.challenged_id,
-          challenge_date: newChallenge.challenge_date,
-          challenge_time: newChallenge.challenge_time,
-          status: "accepted", // Los desafíos creados por admin están automáticamente aceptados
-        },
-      ])
-
-      if (error) throw error
-
-      setMessage("Desafío creado correctamente")
-      setShowCreateChallenge(false)
-      setNewChallenge({
-        challenger_id: "",
-        challenged_id: "",
-        challenge_date: "",
-        challenge_time: "",
-      })
-      loadAdminData()
-    } catch (error: any) {
-      console.error("Error creating challenge:", error)
-      setError(error.message || "Error al crear desafío")
-    }
-  }
-
-  // Función para abrir el diálogo de reportar resultado
-  const openReportResult = (challenge: Challenge) => {
-    setSelectedChallenge(challenge)
-    setResultForm({
-      winner_id: "",
-      score: "",
+    // Calcular uso por cancha
+    reservations.forEach((r) => {
+      const courtName = r.court?.name || `Cancha ${r.court_id}`
+      stats.courtUsage[courtName] = (stats.courtUsage[courtName] || 0) + 1
     })
-    setShowReportResult(true)
+
+    return stats
   }
 
-  // Función para reportar resultado de un desafío
-  const handleReportResult = async () => {
-    try {
-      if (!selectedChallenge) return
-      if (!resultForm.winner_id || !resultForm.score) {
-        setError("Todos los campos son obligatorios")
-        return
-      }
-
-      const { error } = await supabase
-        .from("challenges")
-        .update({
-          status: "completed",
-          winner_id: resultForm.winner_id,
-          score: resultForm.score,
-        })
-        .eq("id", selectedChallenge.id)
-
-      if (error) throw error
-
-      // Si el ganador es el desafiador y está por debajo en el ranking, intercambiar posiciones
-      if (
-        resultForm.winner_id === selectedChallenge.challenger_id &&
-        selectedChallenge.challenger?.ranking_position > selectedChallenge.challenged?.ranking_position
-      ) {
-        // Obtener las posiciones actuales
-        const challengerPos = selectedChallenge.challenger?.ranking_position
-        const challengedPos = selectedChallenge.challenged?.ranking_position
-
-        // Intercambiar posiciones
-        await supabase
-          .from("players")
-          .update({ ranking_position: challengedPos })
-          .eq("id", selectedChallenge.challenger_id)
-
-        await supabase
-          .from("players")
-          .update({ ranking_position: challengerPos })
-          .eq("id", selectedChallenge.challenged_id)
-      }
-
-      setMessage("Resultado reportado correctamente")
-      setShowReportResult(false)
-      loadAdminData()
-    } catch (error: any) {
-      console.error("Error reporting result:", error)
-      setError(error.message || "Error al reportar resultado")
-    }
-  }
-
-  const handleDeletePlayer = async (playerId: string, firstName: string, lastName: string) => {
-    const confirmDelete = window.confirm(
-      `¿Estás seguro de que quieres eliminar a ${firstName} ${lastName}? Esta acción no se puede deshacer.`,
-    )
-
-    if (!confirmDelete) return
-
-    try {
-      // Primero eliminar todos los desafíos relacionados
-      const { error: challengesError } = await supabase
-        .from("challenges")
-        .delete()
-        .or(`challenger_id.eq.${playerId},challenged_id.eq.${playerId}`)
-
-      if (challengesError) {
-        console.error("Error deleting challenges:", challengesError)
-        throw new Error("Error al eliminar desafíos del jugador")
-      }
-
-      // Luego eliminar el jugador
-      const { error: playerError } = await supabase.from("players").delete().eq("id", playerId)
-
-      if (playerError) {
-        console.error("Error deleting player:", playerError)
-        throw new Error("Error al eliminar jugador")
-      }
-
-      setMessage(`Jugador ${firstName} ${lastName} eliminado correctamente`)
-      loadAdminData()
-    } catch (error: any) {
-      console.error("Error deleting player:", error)
-      setError(error.message || "Error al eliminar jugador")
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
+  const stats = getMonthlyStats()
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="outline" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Volver
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Crown className="h-6 w-6 text-yellow-500" />
-            Panel de Administrador
-          </h1>
-          <p className="text-gray-600">Gestión del Belgrano Tennis Challenge</p>
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50">
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center h-16">
+            <Button variant="outline" onClick={onBack} className="mr-4 bg-transparent">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Salir
+            </Button>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">Panel de Administración</h1>
+              <p className="text-sm text-gray-600">Club Belgrano Tennis</p>
+            </div>
+          </div>
         </div>
-      </div>
+      </header>
 
-      {message && (
-        <Alert className="border-blue-200 bg-blue-50">
-          <AlertDescription className="text-blue-800">{message}</AlertDescription>
-        </Alert>
-      )}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {message && (
+          <Alert className="mb-6 border-green-200 bg-green-50">
+            <AlertDescription className="text-green-800">{message}</AlertDescription>
+          </Alert>
+        )}
 
-      {error && (
-        <Alert className="border-red-200 bg-red-50">
-          <AlertDescription className="text-red-800">{error}</AlertDescription>
-        </Alert>
-      )}
+        {error && (
+          <Alert className="mb-6 border-red-200 bg-red-50">
+            <AlertDescription className="text-red-800">{error}</AlertDescription>
+          </Alert>
+        )}
 
-      <Tabs defaultValue="players" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="players">
-            <Users className="h-4 w-4 mr-2" />
-            Jugadores
-          </TabsTrigger>
-          <TabsTrigger value="challenges">
-            <Trophy className="h-4 w-4 mr-2" />
-            Desafíos
-          </TabsTrigger>
-          <TabsTrigger value="calendar">
-            <Calendar className="h-4 w-4 mr-2" />
-            Calendario
-          </TabsTrigger>
-          <TabsTrigger value="stats">
-            <Settings className="h-4 w-4 mr-2" />
-            Estadísticas
-          </TabsTrigger>
-        </TabsList>
+        <Tabs defaultValue="reservations" className="w-full">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="reservations">
+              <Calendar className="h-4 w-4 mr-2" />
+              Reservas
+            </TabsTrigger>
+            <TabsTrigger value="pricing">
+              <Settings className="h-4 w-4 mr-2" />
+              Configuración
+            </TabsTrigger>
+            <TabsTrigger value="stats">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Estadísticas
+            </TabsTrigger>
+            <TabsTrigger value="notifications">
+              <Mail className="h-4 w-4 mr-2" />
+              Notificaciones
+            </TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="players" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Gestión de Jugadores</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {players.map((player) => (
-                  <div key={player.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center font-bold text-blue-600">
-                        #{player.ranking_position}
-                      </div>
-                      <div>
-                        <p className="font-medium">
-                          {player.first_name} {player.last_name}
-                        </p>
-                        <p className="text-sm text-gray-600">{player.email}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {editingPlayer === player.id ? (
-                        <div className="flex items-center gap-2">
-                          <div className="flex flex-col gap-1">
-                            <Label htmlFor="ranking" className="text-xs">
-                              Ranking
-                            </Label>
-                            <Input
-                              id="ranking"
-                              type="number"
-                              value={editForm.ranking_position}
-                              onChange={(e) =>
-                                setEditForm({
-                                  ...editForm,
-                                  ranking_position: Number.parseInt(e.target.value),
-                                })
-                              }
-                              className="w-20 h-8"
-                            />
-                          </div>
-                          <Button size="sm" onClick={() => handleSavePlayer(player.id)}>
-                            <Save className="h-4 w-4" />
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => setEditingPlayer(null)}>
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex gap-1">
-                          <Button size="sm" variant="outline" onClick={() => handleEditPlayer(player)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleDeletePlayer(player.id, player.first_name, player.last_name)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
+          <TabsContent value="reservations" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold">Gestión de Reservas</h2>
+              <div className="flex items-center gap-4">
+                <Label htmlFor="month">Mes:</Label>
+                <Input
+                  id="month"
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="w-auto"
+                />
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            </div>
 
-        <TabsContent value="challenges" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-medium">Gestión de Desafíos</h3>
-            <Dialog open={showCreateChallenge} onOpenChange={setShowCreateChallenge}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Crear Desafío
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Crear Nuevo Desafío</DialogTitle>
-                  <DialogDescription>Programa un desafío entre dos jugadores.</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="challenger">Desafiador</Label>
-                    <Select
-                      value={newChallenge.challenger_id}
-                      onValueChange={(value) => setNewChallenge({ ...newChallenge, challenger_id: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecciona un jugador" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {players
-                          .filter((p) => !p.is_admin && p.ranking_position > 0)
-                          .map((player) => (
-                            <SelectItem key={player.id} value={player.id}>
-                              #{player.ranking_position} - {player.first_name} {player.last_name}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
+            <Card>
+              <CardContent className="pt-6">
+                {loading ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="challenged">Desafiado</Label>
-                    <Select
-                      value={newChallenge.challenged_id}
-                      onValueChange={(value) => setNewChallenge({ ...newChallenge, challenged_id: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecciona un jugador" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {players
-                          .filter((p) => !p.is_admin && p.ranking_position > 0 && p.id !== newChallenge.challenger_id)
-                          .map((player) => (
-                            <SelectItem key={player.id} value={player.id}>
-                              #{player.ranking_position} - {player.first_name} {player.last_name}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="date">Fecha</Label>
-                    <Input
-                      id="date"
-                      type="date"
-                      value={newChallenge.challenge_date}
-                      onChange={(e) => setNewChallenge({ ...newChallenge, challenge_date: e.target.value })}
-                      min={new Date().toISOString().split("T")[0]}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="time">Hora</Label>
-                    <Select
-                      value={newChallenge.challenge_time}
-                      onValueChange={(value) => setNewChallenge({ ...newChallenge, challenge_time: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecciona una hora" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[
-                          "08:00",
-                          "09:00",
-                          "10:00",
-                          "11:00",
-                          "12:00",
-                          "14:00",
-                          "15:00",
-                          "16:00",
-                          "17:00",
-                          "18:00",
-                          "19:00",
-                          "20:00",
-                          "21:00",
-                        ].map((time) => (
-                          <SelectItem key={time} value={time}>
-                            {time}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setShowCreateChallenge(false)}>
-                    Cancelar
-                  </Button>
-                  <Button onClick={handleCreateChallenge}>Crear Desafío</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
-
-          <Card>
-            <CardContent className="pt-6">
-              <div className="space-y-4">
-                {challenges.length === 0 ? (
-                  <p className="text-center text-gray-500 py-4">No hay desafíos registrados</p>
+                ) : reservations.length === 0 ? (
+                  <p className="text-center text-gray-500 py-8">No hay reservas para este mes</p>
                 ) : (
-                  challenges.slice(0, 20).map((challenge) => (
-                    <div key={challenge.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium">
-                            {challenge.challenger?.first_name} {challenge.challenger?.last_name}
-                          </p>
-                          <span className="text-gray-500">vs</span>
-                          <p className="font-medium">
-                            {challenge.challenged?.first_name} {challenge.challenged?.last_name}
-                          </p>
-                        </div>
-                        <p className="text-sm text-gray-600">
-                          {challenge.challenge_date} a las {challenge.challenge_time}
-                        </p>
-                        {challenge.status === "completed" && challenge.winner && (
-                          <p className="text-sm text-green-600">
-                            Ganador: {challenge.winner.first_name} {challenge.winner.last_name} - {challenge.score}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant={
-                            challenge.status === "completed"
-                              ? "default"
-                              : challenge.status === "pending"
-                                ? "secondary"
-                                : challenge.status === "cancelled"
-                                  ? "destructive"
-                                  : "outline"
-                          }
-                        >
-                          {challenge.status}
-                        </Badge>
-
-                        {challenge.status === "pending" && (
-                          <div className="flex gap-1">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleChallengeAction(challenge.id, "approve")}
-                            >
-                              <CheckCircle className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleChallengeAction(challenge.id, "cancel")}
-                            >
-                              <XCircle className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        )}
-
-                        {challenge.status === "accepted" && (
-                          <Button size="sm" variant="outline" onClick={() => openReportResult(challenge)}>
-                            <Trophy className="h-4 w-4 mr-1" />
-                            Resultado
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Diálogo para reportar resultado */}
-          <Dialog open={showReportResult} onOpenChange={setShowReportResult}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Reportar Resultado</DialogTitle>
-                <DialogDescription>
-                  Ingresa el resultado del desafío entre {selectedChallenge?.challenger?.first_name}{" "}
-                  {selectedChallenge?.challenger?.last_name} y {selectedChallenge?.challenged?.first_name}{" "}
-                  {selectedChallenge?.challenged?.last_name}.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="winner">Ganador</Label>
-                  <Select
-                    value={resultForm.winner_id}
-                    onValueChange={(value) => setResultForm({ ...resultForm, winner_id: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona al ganador" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {selectedChallenge && (
-                        <>
-                          <SelectItem value={selectedChallenge.challenger_id}>
-                            {selectedChallenge.challenger?.first_name} {selectedChallenge.challenger?.last_name}
-                          </SelectItem>
-                          <SelectItem value={selectedChallenge.challenged_id}>
-                            {selectedChallenge.challenged?.first_name} {selectedChallenge.challenged?.last_name}
-                          </SelectItem>
-                        </>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="score">Resultado</Label>
-                  <Input
-                    id="score"
-                    placeholder="Ej: 6-4, 7-5"
-                    value={resultForm.score}
-                    onChange={(e) => setResultForm({ ...resultForm, score: e.target.value })}
-                  />
-                  <p className="text-xs text-gray-500">Formato: set1, set2, [super tie-break]</p>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowReportResult(false)}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleReportResult}>Guardar Resultado</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </TabsContent>
-
-        <TabsContent value="calendar" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Calendario de Desafíos
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {/* Agrupar desafíos por fecha */}
-              {challenges.length === 0 ? (
-                <p className="text-center text-gray-500 py-4">No hay desafíos programados</p>
-              ) : (
-                <div className="space-y-6">
-                  {/* Agrupar por fecha y ordenar */}
-                  {Array.from(new Set(challenges.filter((c) => c.status !== "cancelled").map((c) => c.challenge_date)))
-                    .sort()
-                    .map((date) => (
-                      <div key={date} className="space-y-2">
-                        <h3 className="font-medium text-lg flex items-center gap-2">
-                          <Calendar className="h-4 w-4" />
-                          {new Date(date).toLocaleDateString("es-ES", {
-                            weekday: "long",
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                          })}
-                        </h3>
-                        <div className="space-y-2">
-                          {challenges
-                            .filter((c) => c.challenge_date === date && c.status !== "cancelled")
-                            .sort((a, b) => a.challenge_time.localeCompare(b.challenge_time))
-                            .map((challenge) => (
-                              <div
-                                key={challenge.id}
-                                className="flex items-center justify-between p-3 border rounded-lg"
-                              >
-                                <div className="flex items-center gap-3">
-                                  <div className="bg-blue-100 text-blue-800 rounded-md px-2 py-1 text-sm font-medium">
-                                    {challenge.challenge_time}
-                                  </div>
-                                  <div>
-                                    <p>
-                                      <span className="font-medium">
-                                        {challenge.challenger?.first_name} {challenge.challenger?.last_name}
-                                      </span>
-                                      <span className="text-gray-500 mx-2">vs</span>
-                                      <span className="font-medium">
-                                        {challenge.challenged?.first_name} {challenge.challenged?.last_name}
-                                      </span>
-                                    </p>
-                                  </div>
-                                </div>
-                                <Badge
-                                  variant={
-                                    challenge.status === "completed"
-                                      ? "default"
-                                      : challenge.status === "pending"
-                                        ? "secondary"
-                                        : "outline"
-                                  }
-                                >
-                                  {challenge.status}
-                                </Badge>
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="stats" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card>
-              <CardContent className="flex items-center p-6">
-                <Users className="h-8 w-8 text-blue-500" />
-                <div className="ml-4">
-                  <p className="text-2xl font-bold">
-                    {players.filter((p) => !p.is_admin && p.ranking_position > 0).length}
-                  </p>
-                  <p className="text-gray-600 text-sm">Total Jugadores</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="flex items-center p-6">
-                <Trophy className="h-8 w-8 text-green-500" />
-                <div className="ml-4">
-                  <p className="text-2xl font-bold">{challenges.filter((c) => c.status === "pending").length}</p>
-                  <p className="text-gray-600 text-sm">Desafíos Pendientes</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="flex items-center p-6">
-                <CheckCircle className="h-8 w-8 text-purple-500" />
-                <div className="ml-4">
-                  <p className="text-2xl font-bold">{challenges.filter((c) => c.status === "completed").length}</p>
-                  <p className="text-gray-600 text-sm">Partidos Completados</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Top jugadores con más victorias */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Award className="h-5 w-5" />
-                Top Jugadores
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <h3 className="font-medium">Jugadores con más victorias</h3>
-                {/* Calcular victorias por jugador */}
-                {(() => {
-                  const victories: Record<string, { player: Player; count: number }> = {}
-
-                  challenges
-                    .filter((c) => c.status === "completed" && c.winner_id)
-                    .forEach((c) => {
-                      const winnerId = c.winner_id as string
-                      const winner = players.find((p) => p.id === winnerId)
-
-                      if (winner) {
-                        if (!victories[winnerId]) {
-                          victories[winnerId] = { player: winner, count: 0 }
-                        }
-                        victories[winnerId].count++
-                      }
-                    })
-
-                  // Convertir a array y ordenar
-                  const topPlayers = Object.values(victories)
-                    .sort((a, b) => b.count - a.count)
-                    .slice(0, 5)
-
-                  if (topPlayers.length === 0) {
-                    return <p className="text-center text-gray-500 py-4">No hay partidos completados aún</p>
-                  }
-
-                  return (
-                    <div className="space-y-2">
-                      {topPlayers.map(({ player, count }, index) => (
-                        <div key={player.id} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600">
-                              {index + 1}
-                            </div>
+                  <div className="space-y-4">
+                    {reservations.map((reservation) => (
+                      <div key={reservation.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-4">
                             <div>
                               <p className="font-medium">
-                                {player.first_name} {player.last_name}
+                                {reservation.court?.name || `Cancha ${reservation.court_id}`}
                               </p>
-                              <p className="text-sm text-gray-600">Ranking #{player.ranking_position}</p>
+                              <p className="text-sm text-gray-600">
+                                {new Date(reservation.reservation_date + "T00:00:00").toLocaleDateString("es-ES")} •
+                                {reservation.start_time} - {reservation.end_time}
+                              </p>
+                            </div>
+                            <div>
+                              <Badge variant={reservation.game_type === "singles" ? "default" : "secondary"}>
+                                {reservation.game_type === "singles" ? "Singles" : "Dobles"}
+                              </Badge>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium">{reservation.player_names.join(", ")}</p>
+                              <p className="text-xs text-gray-600">{reservation.contact_info}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-bold text-green-600">${reservation.total_cost.toLocaleString()}</p>
+                              <p className="text-xs text-gray-500">
+                                {new Date(reservation.created_at).toLocaleDateString("es-ES")}
+                              </p>
                             </div>
                           </div>
-                          <div className="bg-green-100 text-green-800 rounded-md px-3 py-1">
-                            {count} {count === 1 ? "victoria" : "victorias"}
-                          </div>
                         </div>
-                      ))}
+                        <Button variant="destructive" size="sm" onClick={() => handleDeleteReservation(reservation.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="pricing" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="h-5 w-5" />
+                  Configuración General
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {editingPrices ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="singles">Precio Singles (por jugador)</Label>
+                        <Input
+                          id="singles"
+                          type="number"
+                          value={newPricing.singles_price}
+                          onChange={(e) =>
+                            setNewPricing({
+                              ...newPricing,
+                              singles_price: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="doubles">Precio Dobles (por jugador)</Label>
+                        <Input
+                          id="doubles"
+                          type="number"
+                          value={newPricing.doubles_price}
+                          onChange={(e) =>
+                            setNewPricing({
+                              ...newPricing,
+                              doubles_price: Number(e.target.value),
+                            })
+                          }
+                        />
+                      </div>
                     </div>
-                  )
-                })()}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                    <div>
+                      <Label htmlFor="adminEmail">Email para Notificaciones</Label>
+                      <Input
+                        id="adminEmail"
+                        type="email"
+                        placeholder="admin@belgranotennis.com"
+                        value={newPricing.admin_email || ""}
+                        onChange={(e) =>
+                          setNewPricing({
+                            ...newPricing,
+                            admin_email: e.target.value,
+                          })
+                        }
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Email donde llegarán las notificaciones de nuevas reservas
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={handleUpdatePricing} disabled={loading}>
+                        <Save className="h-4 w-4 mr-2" />
+                        Guardar
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setEditingPrices(false)
+                          setNewPricing(pricing)
+                        }}
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="text-center p-4 bg-green-50 rounded-lg">
+                        <p className="text-2xl font-bold text-green-600">${pricing.singles_price.toLocaleString()}</p>
+                        <p className="text-sm text-gray-600">Singles (por jugador)</p>
+                      </div>
+                      <div className="text-center p-4 bg-blue-50 rounded-lg">
+                        <p className="text-2xl font-bold text-blue-600">${pricing.doubles_price.toLocaleString()}</p>
+                        <p className="text-sm text-gray-600">Dobles (por jugador)</p>
+                      </div>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-4 w-4 text-gray-600" />
+                        <span className="text-sm text-gray-600">Email de notificaciones:</span>
+                      </div>
+                      <p className="font-medium">{pricing.admin_email || "No configurado"}</p>
+                    </div>
+                    <Button onClick={() => setEditingPrices(true)}>
+                      <Edit className="h-4 w-4 mr-2" />
+                      Modificar Configuración
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="stats" className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <Card>
+                <CardContent className="flex items-center p-6">
+                  <Calendar className="h-8 w-8 text-blue-500" />
+                  <div className="ml-4">
+                    <p className="text-2xl font-bold">{stats.totalReservations}</p>
+                    <p className="text-gray-600 text-sm">Total Reservas</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="flex items-center p-6">
+                  <DollarSign className="h-8 w-8 text-green-500" />
+                  <div className="ml-4">
+                    <p className="text-2xl font-bold">${stats.totalRevenue.toLocaleString()}</p>
+                    <p className="text-gray-600 text-sm">Ingresos del Mes</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="flex items-center p-6">
+                  <Settings className="h-8 w-8 text-purple-500" />
+                  <div className="ml-4">
+                    <p className="text-2xl font-bold">{stats.singlesCount}</p>
+                    <p className="text-gray-600 text-sm">Partidos Singles</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="flex items-center p-6">
+                  <Settings className="h-8 w-8 text-orange-500" />
+                  <div className="ml-4">
+                    <p className="text-2xl font-bold">{stats.doublesCount}</p>
+                    <p className="text-gray-600 text-sm">Partidos Dobles</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Uso por Cancha</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {Object.entries(stats.courtUsage).map(([courtName, count]) => (
+                    <div key={courtName} className="flex items-center justify-between">
+                      <span>{courtName}</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-32 bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-green-600 h-2 rounded-full"
+                            style={{
+                              width: `${(count / Math.max(...Object.values(stats.courtUsage))) * 100}%`,
+                            }}
+                          ></div>
+                        </div>
+                        <span className="font-bold">{count}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="notifications" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Mail className="h-5 w-5" />
+                  Sistema de Notificaciones
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <Alert className="border-blue-200 bg-blue-50">
+                    <Mail className="h-4 w-4" />
+                    <AlertDescription className="text-blue-800">
+                      <strong>Email configurado:</strong> {pricing.admin_email || "No configurado"}
+                      <br />
+                      Las notificaciones se envían automáticamente cuando se realiza una nueva reserva.
+                    </AlertDescription>
+                  </Alert>
+
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="font-medium mb-2">Información incluida en las notificaciones:</h4>
+                    <ul className="text-sm text-gray-600 space-y-1">
+                      <li>• Cancha reservada</li>
+                      <li>• Fecha y horario</li>
+                      <li>• Tipo de juego (Singles/Dobles)</li>
+                      <li>• Apellidos de los jugadores</li>
+                      <li>• Teléfono de contacto</li>
+                      <li>• Costo total</li>
+                    </ul>
+                  </div>
+
+                  <p className="text-sm text-gray-600">
+                    Para configurar el email de notificaciones, ve a la pestaña "Configuración" y modifica el campo
+                    correspondiente.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </main>
     </div>
   )
 }
