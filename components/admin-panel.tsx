@@ -283,42 +283,12 @@ export function AdminPanel({ onBack, courts, pricing, onPricingUpdate }: AdminPa
               <CardContent>
                 {editingPrices ? (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="singles">Precio Singles (por jugador)</Label>
-                        <Input
-                          id="singles"
-                          type="number"
-                          value={newPricing.singles_price}
-                          onChange={(e) =>
-                            setNewPricing({
-                              ...newPricing,
-                              singles_price: Number(e.target.value),
-                            })
-                          }
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="doubles">Precio Dobles (por jugador)</Label>
-                        <Input
-                          id="doubles"
-                          type="number"
-                          value={newPricing.doubles_price}
-                          onChange={(e) =>
-                            setNewPricing({
-                              ...newPricing,
-                              doubles_price: Number(e.target.value),
-                            })
-                          }
-                        />
-                      </div>
-                    </div>
                     <div>
-                      <Label htmlFor="adminEmail">Email para Notificaciones</Label>
-                      <Input
-                        id="adminEmail"
-                        type="email"
-                        placeholder="admin@belgranotennis.com"
+                      <Label htmlFor="infoText">Información General</Label>
+                      <textarea
+                        id="infoText"
+                        className="w-full min-h-[120px] p-3 border rounded-md resize-vertical"
+                        placeholder="Escribe aquí la información que quieras mostrar a los usuarios (precios, promociones, horarios especiales, etc.)"
                         value={newPricing.admin_email || ""}
                         onChange={(e) =>
                           setNewPricing({
@@ -328,7 +298,7 @@ export function AdminPanel({ onBack, courts, pricing, onPricingUpdate }: AdminPa
                         }
                       />
                       <p className="text-xs text-gray-500 mt-1">
-                        Email donde llegarán las notificaciones de nuevas reservas
+                        Esta información se mostrará en lugar de los precios fijos
                       </p>
                     </div>
                     <div className="flex gap-2">
@@ -350,26 +320,15 @@ export function AdminPanel({ onBack, courts, pricing, onPricingUpdate }: AdminPa
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="text-center p-4 bg-green-50 rounded-lg">
-                        <p className="text-2xl font-bold text-green-600">${pricing.singles_price.toLocaleString()}</p>
-                        <p className="text-sm text-gray-600">Singles (por jugador)</p>
-                      </div>
-                      <div className="text-center p-4 bg-blue-50 rounded-lg">
-                        <p className="text-2xl font-bold text-blue-600">${pricing.doubles_price.toLocaleString()}</p>
-                        <p className="text-sm text-gray-600">Dobles (por jugador)</p>
-                      </div>
-                    </div>
                     <div className="p-4 bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <Mail className="h-4 w-4 text-gray-600" />
-                        <span className="text-sm text-gray-600">Email de notificaciones:</span>
+                      <h4 className="font-medium mb-2">Información Actual:</h4>
+                      <div className="whitespace-pre-wrap text-sm">
+                        {pricing.admin_email || "No hay información configurada"}
                       </div>
-                      <p className="font-medium">{pricing.admin_email || "No configurado"}</p>
                     </div>
                     <Button onClick={() => setEditingPrices(true)}>
                       <Edit className="h-4 w-4 mr-2" />
-                      Modificar Configuración
+                      Modificar Información
                     </Button>
                   </div>
                 )}

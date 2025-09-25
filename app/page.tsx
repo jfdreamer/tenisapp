@@ -121,21 +121,13 @@ export default function ClubBelgranoTennis() {
             Selecciona una cancha para ver disponibilidad y hacer tu reserva inmediata
           </p>
 
-          {/* Precios */}
           <Card className="max-w-md mx-auto mb-8">
             <CardHeader>
-              <CardTitle className="text-lg">💰 Precios por Jugador</CardTitle>
+              <CardTitle className="text-lg">📋 Información</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-4 text-center">
-                <div>
-                  <p className="text-2xl font-bold text-green-600">${pricing.singles_price.toLocaleString()}</p>
-                  <p className="text-sm text-gray-600">Singles</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-blue-600">${pricing.doubles_price.toLocaleString()}</p>
-                  <p className="text-sm text-gray-600">Dobles</p>
-                </div>
+              <div className="whitespace-pre-wrap text-sm">
+                {pricing.admin_email || "Consulta precios y promociones en recepción"}
               </div>
             </CardContent>
           </Card>
@@ -179,19 +171,18 @@ export default function ClubBelgranoTennis() {
           ))}
         </div>
 
-        {/* Información adicional */}
+        {/* Información adicional con campos editables */}
         <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">⏰ Horarios</CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="space-y-2 text-sm">
-                <li>• Turnos de 1 hora y 30 minutos</li>
-                <li>• Desde las 7:00 hasta las 22:00</li>
-                <li>• Canchas 1, 2, 3: hasta 20:00</li>
-                <li>• Canchas 4, 5: hasta 22:00 (con luz)</li>
-              </ul>
+              <div className="whitespace-pre-wrap text-sm">
+                {/* Aquí el admin podrá editar esta información */}
+                Días de semana: • Singles: 1h 30min • Dobles: 2h Fines de semana: • Singles: 1h • Dobles: 1h 30min
+                Horarios: 7:00 - 22:00 Turnos cada 30 minutos
+              </div>
             </CardContent>
           </Card>
 
@@ -200,13 +191,10 @@ export default function ClubBelgranoTennis() {
               <CardTitle className="text-lg flex items-center gap-2">📋 Reservas</CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="space-y-2 text-sm">
-                <li>• Reserva inmediata y confirmada</li>
-                <li>• Indica si es Singles o Dobles</li>
-                <li>• Proporciona apellidos de jugadores</li>
-                <li>• Pago en efectivo al llegar</li>
-                <li>• Notificación automática al club</li>
-              </ul>
+              <div className="whitespace-pre-wrap text-sm">
+                • Reserva inmediata y confirmada • Indica si es Singles o Dobles • Proporciona apellidos de jugadores •
+                Pago en efectivo al llegar • Llega 10 minutos antes • Notificación automática al club
+              </div>
             </CardContent>
           </Card>
 
@@ -215,12 +203,10 @@ export default function ClubBelgranoTennis() {
               <CardTitle className="text-lg flex items-center gap-2">📞 Contacto</CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="space-y-2 text-sm">
-                <li>• Teléfono: (011) 4567-8900</li>
-                <li>• WhatsApp: +54 9 11 1234-5678</li>
-                <li>• Email: reservas@belgranotennis.com</li>
-                <li>• Dirección: Av. Belgrano 1234</li>
-              </ul>
+              <div className="whitespace-pre-wrap text-sm">
+                • Teléfono: (011) 4567-8900 • WhatsApp: +54 9 11 1234-5678 • Email: reservas@belgranotennis.com •
+                Dirección: Av. Belgrano 1234
+              </div>
             </CardContent>
           </Card>
         </div>

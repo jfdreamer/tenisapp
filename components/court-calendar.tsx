@@ -54,6 +54,20 @@ export function CourtCalendar({ court, pricing, onBack }: CourtCalendarProps) {
     contactInfo: "",
   })
 
+  const loadReservations = async () => {
+    const { data, error } = await supabase
+      .from("reservations")
+      .select("*")
+      .eq("court_id", court.id)
+      .eq("reservation_date", selectedDate)
+
+    if (error) {
+      console.error("Error loading reservations:", error)
+    } else {
+      setReservations(data || [])
+    }
+  }
+
   useEffect(() => {
     loadReservations()
   }, [selectedDate, court.id])
@@ -67,11 +81,23 @@ export function CourtCalendar({ court, pricing, onBack }: CourtCalendarProps) {
     const startHour = 7
     const endHour = court.has_lights ? 22 : 20
 
+    const selectedDateObj = new Date(selectedDate + "T00:00:00")
+    const dayOfWeek = selectedDateObj.getDay() // 0 = domingo, 6 = sábado
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+
     // Generar slots cada 30 minutos
     for (let hour = startHour; hour < endHour; hour++) {
       for (let minutes = 0; minutes < 60; minutes += 30) {
         const currentTime = hour + minutes / 60
-        const endTime = currentTime + 1.5 // 1.5 horas de duración
+
+        // Días de semana: Singles 1.5h, Dobles 2h
+        // Fines de semana: Singles 1h, Dobles 1.5h
+        const singlesDuration = isWeekend ? 1 : 1.5
+        const doublesDuration = isWeekend ? 1.5 : 2
+
+        // Para mostrar slots, usamos la duración máxima posible
+        const maxDuration = Math.max(singlesDuration, doublesDuration)
+        const endTime = currentTime + maxDuration
 
         // Verificar que el turno termine antes del horario límite
         if (endTime <= (court.has_lights ? 22 : 20)) {
@@ -89,41 +115,34 @@ export function CourtCalendar({ court, pricing, onBack }: CourtCalendarProps) {
     return slots
   }
 
-  const loadReservations = async () => {
-    try {
-      setLoading(true)
-      const { data, error } = await supabase
-        .from("reservations")
-        .select("*")
-        .eq("court_id", court.id)
-        .eq("reservation_date", selectedDate)
-        .order("start_time")
-
-      if (error) throw error
-      setReservations(data || [])
-    } catch (error) {
-      console.error("Error loading reservations:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const generateAvailableSlots = () => {
     const allSlots = generateTimeSlots()
 
     const available = allSlots.filter((slot) => {
       const [startTime] = slot.split("-")
       const slotStart = timeToMinutes(startTime)
-      const slotEnd = slotStart + 90 // 1.5 horas en minutos
 
-      // Verificar conflictos con reservas existentes
+      const selectedDateObj = new Date(selectedDate + "T00:00:00")
+      const dayOfWeek = selectedDateObj.getDay()
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+
+      const singlesDuration = isWeekend ? 60 : 90 // en minutos
+      const doublesDuration = isWeekend ? 90 : 120 // en minutos
+
+      const singlesEnd = slotStart + singlesDuration
+      const doublesEnd = slotStart + doublesDuration
+
+      // Verificar conflictos con reservas existentes para ambos tipos
       for (const reservation of reservations) {
         const reservationStart = timeToMinutes(reservation.start_time)
         const reservationEnd = timeToMinutes(reservation.end_time)
 
-        // Verificar solapamiento
-        if (slotStart < reservationEnd && slotEnd > reservationStart) {
-          return false
+        // Verificar solapamiento para singles
+        if (slotStart < reservationEnd && singlesEnd > reservationStart) {
+          // Si hay conflicto con singles, verificar si al menos dobles puede funcionar
+          if (slotStart < reservationEnd && doublesEnd > reservationStart) {
+            return false // Ambos tipos tienen conflicto
+          }
         }
       }
 
@@ -179,9 +198,28 @@ export function CourtCalendar({ court, pricing, onBack }: CourtCalendarProps) {
         return
       }
 
-      const [startTime, endTime] = selectedSlot.split("-")
-      const pricePerPlayer = reservationForm.gameType === "singles" ? pricing.singles_price * 2 : pricing.doubles_price
-      const totalCost = pricePerPlayer * playerCount
+      const [startTime] = selectedSlot.split("-")
+
+      const selectedDateObj = new Date(selectedDate + "T00:00:00")
+      const dayOfWeek = selectedDateObj.getDay()
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+
+      const duration =
+        reservationForm.gameType === "singles"
+          ? isWeekend
+            ? 1
+            : 1.5 // Singles: 1h fines de semana, 1.5h días de semana
+          : isWeekend
+            ? 1.5
+            : 2 // Dobles: 1.5h fines de semana, 2h días de semana
+
+      const startMinutes = timeToMinutes(startTime)
+      const endMinutes = startMinutes + duration * 60
+      const endHour = Math.floor(endMinutes / 60)
+      const endMin = endMinutes % 60
+      const endTime = `${endHour.toString().padStart(2, "0")}:${endMin.toString().padStart(2, "0")}`
+
+      const totalCost = reservationForm.gameType === "singles" ? 10000 : 12000
 
       const reservationData = {
         court_id: court.id,
@@ -340,46 +378,43 @@ export function CourtCalendar({ court, pricing, onBack }: CourtCalendarProps) {
 
           {/* Panel lateral */}
           <div className="space-y-6">
-            {/* Precios */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <DollarSign className="h-5 w-5" />
-                  Precios
+                  Información
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span>Singles (2 jugadores):</span>
-                    <span className="font-bold">${(pricing.singles_price * 2).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Dobles (4 jugadores):</span>
-                    <span className="font-bold">${pricing.doubles_price.toLocaleString()}</span>
-                  </div>
+                <div className="whitespace-pre-wrap text-sm">
+                  {pricing.admin_email || "Consulta precios y promociones en recepción"}
                 </div>
               </CardContent>
             </Card>
 
-            {/* Información */}
+            {/* Información de turnos actualizada */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Users className="h-5 w-5" />
-                  Información
+                  Duración de Turnos
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2 text-sm">
                   <li>
-                    • <strong>Turnos cada 30 minutos</strong>
+                    • <strong>Días de semana:</strong>
                   </li>
-                  <li>• Duración: 1 hora y 30 minutos</li>
+                  <li className="ml-4">- Singles: 1h 30min</li>
+                  <li className="ml-4">- Dobles: 2h</li>
+                  <li>
+                    • <strong>Fines de semana:</strong>
+                  </li>
+                  <li className="ml-4">- Singles: 1h</li>
+                  <li className="ml-4">- Dobles: 1h 30min</li>
+                  <li>• Turnos cada 30 minutos</li>
                   <li>• Reserva inmediata y confirmada</li>
-                  <li>• Pago en efectivo al llegar</li>
                   <li>• Llega 10 minutos antes</li>
-                  <li>• Notificación automática al club</li>
                 </ul>
               </CardContent>
             </Card>
@@ -444,16 +479,22 @@ export function CourtCalendar({ court, pricing, onBack }: CourtCalendarProps) {
 
                     <div className="bg-gray-50 p-3 rounded-lg">
                       <div className="flex justify-between items-center">
-                        <span>Costo Total:</span>
-                        <span className="text-xl font-bold text-green-600">
-                          $
-                          {(reservationForm.gameType === "singles"
-                            ? pricing.singles_price * 2
-                            : pricing.doubles_price * 4
-                          ).toLocaleString()}
+                        <span>Duración:</span>
+                        <span className="text-lg font-bold text-blue-600">
+                          {(() => {
+                            const selectedDateObj = new Date(selectedDate + "T00:00:00")
+                            const dayOfWeek = selectedDateObj.getDay()
+                            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+
+                            if (reservationForm.gameType === "singles") {
+                              return isWeekend ? "1 hora" : "1h 30min"
+                            } else {
+                              return isWeekend ? "1h 30min" : "2 horas"
+                            }
+                          })()}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-600 mt-1">Pago en efectivo al llegar</p>
+                      <p className="text-xs text-gray-600 mt-1">Consulta precios en recepción</p>
                     </div>
 
                     <Alert className="border-blue-200 bg-blue-50">
