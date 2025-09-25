@@ -4,9 +4,10 @@ import { useState, useEffect } from "react"
 import { CourtCalendar } from "@/components/court-calendar"
 import { AdminPanel } from "@/components/admin-panel"
 import { AdminLogin } from "@/components/admin-login"
+import { MemberLogin } from "@/components/member-login"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Crown } from "lucide-react"
+import { Crown, LogOut } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 
 interface Court {
@@ -27,17 +28,20 @@ export default function ClubBelgranoTennis() {
   const [pricing, setPricing] = useState<Pricing>({ singles_price: 0, doubles_price: 0 })
   const [selectedCourt, setSelectedCourt] = useState<Court | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isMember, setIsMember] = useState(false)
   const [showAdminLogin, setShowAdminLogin] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    checkAuthStatus()
     loadInitialData()
-    checkAdminStatus()
   }, [])
 
-  const checkAdminStatus = () => {
+  const checkAuthStatus = () => {
     const adminStatus = localStorage.getItem("isClubAdmin")
+    const memberStatus = localStorage.getItem("isMember")
     setIsAdmin(adminStatus === "true")
+    setIsMember(memberStatus === "true")
   }
 
   const loadInitialData = async () => {
@@ -68,8 +72,20 @@ export default function ClubBelgranoTennis() {
     localStorage.setItem("isClubAdmin", "true")
   }
 
+  const handleMemberLogin = () => {
+    setIsMember(true)
+  }
+
   const handleAdminLogout = () => {
     setIsAdmin(false)
+    localStorage.removeItem("isClubAdmin")
+    setSelectedCourt(null)
+  }
+
+  const handleMemberLogout = () => {
+    setIsMember(false)
+    setIsAdmin(false)
+    localStorage.removeItem("isMember")
     localStorage.removeItem("isClubAdmin")
     setSelectedCourt(null)
   }
@@ -83,6 +99,10 @@ export default function ClubBelgranoTennis() {
         </div>
       </div>
     )
+  }
+
+  if (!isMember) {
+    return <MemberLogin onMemberLogin={handleMemberLogin} />
   }
 
   if (showAdminLogin) {
@@ -106,10 +126,16 @@ export default function ClubBelgranoTennis() {
               <div className="text-2xl font-bold text-green-700">🎾</div>
               <h1 className="text-xl font-bold text-gray-900">Club Belgrano Tennis</h1>
             </div>
-            <Button variant="outline" onClick={() => setShowAdminLogin(true)}>
-              <Crown className="h-4 w-4 mr-2" />
-              Admin
-            </Button>
+            <div className="flex items-center space-x-2">
+              <Button variant="outline" onClick={() => setShowAdminLogin(true)}>
+                <Crown className="h-4 w-4 mr-2" />
+                Admin
+              </Button>
+              <Button variant="outline" onClick={handleMemberLogout}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Salir
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -133,7 +159,6 @@ export default function ClubBelgranoTennis() {
           </Card>
         </div>
 
-        {/* Canchas */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
           {courts.map((court) => (
             <Card
@@ -171,7 +196,6 @@ export default function ClubBelgranoTennis() {
           ))}
         </div>
 
-        {/* Información adicional con campos editables */}
         <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card>
             <CardHeader>
@@ -179,7 +203,6 @@ export default function ClubBelgranoTennis() {
             </CardHeader>
             <CardContent>
               <div className="whitespace-pre-wrap text-sm">
-                {/* Aquí el admin podrá editar esta información */}
                 Días de semana: • Singles: 1h 30min • Dobles: 2h Fines de semana: • Singles: 1h • Dobles: 1h 30min
                 Horarios: 7:00 - 22:00 Turnos cada 30 minutos
               </div>
