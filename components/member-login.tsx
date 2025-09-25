@@ -79,15 +79,6 @@ export function MemberLogin({ onMemberLogin }: MemberLoginProps) {
               {loading ? "Ingresando..." : "Ingresar"}
             </Button>
           </form>
-
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-            <h3 className="font-semibold text-blue-800 mb-2">Información de Acceso:</h3>
-            <p className="text-sm text-blue-700">
-              • Usuario: <strong>belgrano</strong>
-              <br />• Contraseña: <strong>tenis2024</strong>
-              <br />• Compartir solo con miembros del club
-            </p>
-          </div>
         </CardContent>
       </Card>
     </div>
